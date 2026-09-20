@@ -43,6 +43,7 @@ class Config:
     airtable_base_id: str = ""
     airtable_jobs_table_id: str = ""
     airtable_runlog_table_id: str = ""
+    resume_path: Optional[str] = None  # path to a .txt/.md resume for scoring
 
 
 def load_config(path: str = "config.yaml") -> Config:
@@ -89,4 +90,5 @@ def load_config(path: str = "config.yaml") -> Config:
         airtable_base_id=airtable.get("base_id", ""),
         airtable_jobs_table_id=airtable.get("jobs_table_id", ""),
         airtable_runlog_table_id=airtable.get("runlog_table_id", ""),
+        resume_path=raw.get("resume_path"),
     )

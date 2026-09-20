@@ -28,6 +28,11 @@ def main() -> None:
         "--config", default="config.yaml",
         help="Path to the config file (default: config.yaml).",
     )
+    parser.add_argument(
+        "--resume",
+        help="Path to your resume (.txt or .md). Scores each job 0-100 by keyword match. "
+             "Overrides resume_path in config.yaml.",
+    )
     args = parser.parse_args()
 
     try:
@@ -36,7 +41,7 @@ def main() -> None:
         print("Config error: {}".format(exc), file=sys.stderr)
         sys.exit(1)
 
-    summary = run(config, dry_run=args.dry_run)
+    summary = run(config, dry_run=args.dry_run, resume_path=args.resume)
 
     # Exit with code 1 if every company failed (something is probably wrong).
     all_failed = all(r.get("outcome") in ("Failed",) for r in summary["results"])

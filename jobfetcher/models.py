@@ -35,6 +35,7 @@ class Job:
     salary_interval: Optional[str] = None  # e.g. "year", "hour"
     raw: Dict[str, Any] = field(default_factory=dict)  # the untouched JSON for this one job
     lane: Optional[str] = None       # set later by the title filter
+    match_score: Optional[int] = None  # 0–100 resume match, set by the scorer
 
     @property
     def fingerprint(self) -> str:

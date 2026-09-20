@@ -46,6 +46,7 @@ JOB_FIELDS = {
     "lane":          "fldCRFaPZ8MfRXtbl",
     "status":        "fldPK1IeeTrVwBfZR",
     "notes":         "fldfFzwUoLMk8GYkV",
+    "match_score":   "",  # CREATE a "Match Score" number field in Airtable, paste its field ID here
 }
 
 # -- Field IDs for the Run Log table --
@@ -167,6 +168,8 @@ def _job_to_record(job: Job) -> Dict[str, Any]:
         fields[JOB_FIELDS["posted_date"]] = job.posted_date
     if job.lane:
         fields[JOB_FIELDS["lane"]] = job.lane
+    if job.match_score is not None and JOB_FIELDS["match_score"]:
+        fields[JOB_FIELDS["match_score"]] = job.match_score
 
     return {"fields": fields}
 

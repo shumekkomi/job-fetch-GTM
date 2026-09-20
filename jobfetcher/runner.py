@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import List, Set, Tuple
+from typing import List, Optional, Set, Tuple
 
 from .adapters import ADAPTERS
 from .airtable import fetch_existing_jobs, insert_jobs, insert_run_log
@@ -20,6 +20,7 @@ from .config import Company, Config
 from .dedup import DedupResult, dedup
 from .filters import FilterStats, filter_jobs
 from .models import CompanyResult, Job
+from .resume import extract_keywords, load_resume, score_job
 
 logger = logging.getLogger("jobfetcher")
 
@@ -31,10 +32,11 @@ def _setup_logging() -> None:
     logger.setLevel(logging.INFO)
 
 
-def run(config: Config, dry_run: bool = False) -> dict:
+def run(config: Config, dry_run: bool = False, resume_path: str = None) -> dict:
     """Run the full pipeline. Returns a summary dict for testing/inspection.
 
     If dry_run is True, fetches and filters but writes nothing to Airtable.
+    resume_path overrides config.resume_path (CLI flag wins over config file).
     """
     _setup_logging()
 
@@ -44,6 +46,17 @@ def run(config: Config, dry_run: bool = False) -> dict:
         "results": [],    # one dict per company
         "dry_run": dry_run,
     }
+
+    # -- Load resume keywords if a resume was provided --
+    resume_file = resume_path or config.resume_path
+    resume_keywords = None
+    if resume_file:
+        try:
+            text = load_resume(resume_file)
+            resume_keywords = extract_keywords(text)
+            logger.info("Loaded resume: %d keywords extracted from %s", len(resume_keywords), resume_file)
+        except (FileNotFoundError, ValueError) as exc:
+            logger.warning("Could not load resume: %s (scoring disabled)", exc)
 
     # -- Step 1: fetch existing Airtable records for dedup --
     existing_urls: Set[str] = set()
@@ -75,7 +88,8 @@ def run(config: Config, dry_run: bool = False) -> dict:
 
     for company in active_companies:
         result = _process_company(
-            company, config, existing_urls, existing_company_titles, dry_run
+            company, config, existing_urls, existing_company_titles, dry_run,
+            resume_keywords,
         )
         summary["results"].append(result)
         summary["total_new_jobs"] += result.get("new_count", 0)
@@ -113,6 +127,7 @@ def _process_company(
     existing_urls: Set[str],
     existing_company_titles: Set[str],
     dry_run: bool,
+    resume_keywords: Optional[Set[str]] = None,
 ) -> dict:
     """Fetch, filter, dedup, and write for one company. Never raises."""
     result = {"company": company.name, "outcome": "OK", "new_count": 0, "note": ""}
@@ -168,6 +183,13 @@ def _process_company(
             "; ".join(dedup_result.skipped_title),
         )
 
+    # -- Score against resume --
+    if resume_keywords and new_jobs:
+        for job in new_jobs:
+            job.match_score = score_job(job, resume_keywords)
+        scored = sorted(new_jobs, key=lambda j: j.match_score or 0, reverse=True)
+        new_jobs = scored
+
     # Build the note for the run log.
     note_parts = [stats.summary()]
     if dedup_result.skipped_url:
@@ -181,7 +203,8 @@ def _process_company(
         if dry_run:
             logger.info("%s: DRY RUN -- would insert %d jobs:", company.name, len(new_jobs))
             for j in new_jobs:
-                logger.info("  [%s] %s -- %s (%s)", j.lane, j.company, j.title, j.location)
+                score_label = " score:{}".format(j.match_score) if j.match_score is not None else ""
+                logger.info("  [%s%s] %s -- %s (%s)", j.lane, score_label, j.company, j.title, j.location)
         else:
             try:
                 created = insert_jobs(
