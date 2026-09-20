@@ -30,20 +30,24 @@ class TestExtractKeywords:
 
 
 class TestScoreJob:
-    def test_perfect_overlap(self):
-        kw = {"python", "marketing", "analytics"}
-        job = _job(description="We need python marketing analytics expertise")
-        assert score_job(job, kw) == 100
-
-    def test_partial_overlap(self):
-        kw = {"python", "marketing", "analytics", "hubspot"}
-        job = _job(description="We need python and marketing skills")
+    def test_high_coverage(self):
+        # Resume covers most of the JD's terms.
+        kw = {"python", "marketing", "analytics", "growth", "automation",
+              "hubspot", "campaigns", "segmentation", "retention"}
+        job = _job(description="We need python marketing analytics and growth automation")
         score = score_job(job, kw)
-        assert 40 <= score <= 60
+        assert score >= 50
+
+    def test_low_coverage(self):
+        # Resume barely overlaps with the JD's terms.
+        kw = {"python"}
+        job = _job(description="We need a chef with culinary pastry and baking expertise")
+        score = score_job(job, kw)
+        assert score <= 20
 
     def test_no_overlap(self):
         kw = {"python", "marketing"}
-        job = _job(description="Looking for a chef with culinary experience")
+        job = _job(description="culinary pastry baking desserts")
         assert score_job(job, kw) == 0
 
     def test_empty_keywords(self):

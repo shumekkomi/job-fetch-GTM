@@ -39,6 +39,53 @@ _STOP_WORDS = {
     "used", "use", "including", "across", "within", "ensure", "based",
     "key", "high", "level", "part", "time", "year", "years", "day",
     "etc", "per", "via",
+    # Resume/CV filler — action verbs, structure words, generic terms.
+    "managed", "handling", "handle", "handled", "ran", "run", "running",
+    "built", "build", "building", "made", "making", "make", "worked",
+    "focused", "looking", "created", "turned", "took", "spent", "gave",
+    "wrote", "written", "write", "started", "set", "got", "put",
+    "brought", "first", "one", "two", "three", "four", "back", "full",
+    "every", "always", "never", "still", "right", "thing", "things",
+    "way", "place", "people", "person", "end", "get", "take", "keep",
+    "let", "say", "see", "know", "come", "going", "want", "tell",
+    "show", "much", "even", "top", "best", "around", "since",
+    "long", "next", "last", "real", "live", "what", "done", "enough",
+    "actually", "directly", "currently", "alongside", "without", "below",
+    "under", "present", "block", "entry", "variant", "fixed", "notes",
+    "section", "instructions", "assembly", "pick", "start", "target",
+    "matching", "tagged", "compact", "parked", "link", "links", "repo",
+    "line", "page", "pages", "site", "input", "fill", "plain",
+    "already", "often", "while", "later", "once", "early", "closer",
+    "rest", "felt", "gave", "tried", "left", "went", "pushed",
+    "applied", "applying", "moved", "moving", "turned", "turning",
+    "helped", "helping", "found", "finding", "learned", "learning",
+    "tested", "testing", "tracked", "tracking", "changed", "changing",
+    "identified", "reported", "reporting", "delivered", "delivering",
+    "prepared", "preparing", "planned", "planning", "coordinated",
+    "recommended", "encouraged", "explored", "exploring", "reviewed",
+    "reviewed", "reviewed", "diagnosed", "flagged", "resolved",
+    "adjusted", "adjusting", "monitored", "monitoring", "achieved",
+    "drove", "driving", "growing", "grown", "knew", "knowing",
+    "observed", "sitting", "stood", "sitting", "tried", "tried",
+    # Generic job/resume terms.
+    "role", "roles", "team", "teams", "company", "companies", "client",
+    "clients", "project", "projects", "position", "positions",
+    "industry", "industries", "service", "services", "business",
+    "account", "accounts", "management", "manager", "specialist",
+    "coordinator", "executive", "consultant", "intern", "senior",
+    "junior", "lead", "head", "director", "officer", "associate",
+    "experience", "responsible", "responsibility", "responsibilities",
+    "able", "ability", "strong", "excellent", "good", "great",
+    "various", "multiple", "different", "specific", "relevant",
+    "professional", "personal", "internal", "external",
+    # Place/time/structure words.
+    "year", "years", "month", "months", "week", "weeks", "day", "days",
+    "apr", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "jan",
+    "feb", "mar", "london", "hong", "kong", "europe",
+    # Markdown/document terms.
+    "master", "modular", "reference", "document", "lane", "tags",
+    "summary", "ordering", "bullets", "tailored", "header",
+    "education", "languages", "skills", "trim",
 }
 
 # Minimum word length to keep (after lowering). Filters out "ai", "uk", etc.
@@ -81,6 +128,13 @@ def extract_keywords(text: str) -> Set[str]:
     checks each word independently, which is simpler and avoids
     n-gram complexity.
     """
+    # Strip Markdown headings, bullets, and horizontal rules.
+    text = re.sub(r"^#{1,6}\s+", " ", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*[-*]\s+", " ", text, flags=re.MULTILINE)
+    text = re.sub(r"^---+\s*$", " ", text, flags=re.MULTILINE)
+    # Strip bold/italic markers.
+    text = re.sub(r"\*{1,2}|\_{1,2}", " ", text)
+
     # Normalise: lowercase, replace non-alphanumeric with spaces.
     normalised = re.sub(r"[^a-z0-9+#.\-]", " ", text.lower())
     tokens = normalised.split()
@@ -90,6 +144,9 @@ def extract_keywords(text: str) -> Set[str]:
         # Strip trailing dots/dashes (e.g. "python." -> "python").
         token = token.strip(".-")
         if not token:
+            continue
+        # Skip pure numbers, dates, phone numbers.
+        if re.match(r"^[\d\-+.]+$", token):
             continue
         if token in _STOP_WORDS:
             continue
@@ -102,21 +159,24 @@ def extract_keywords(text: str) -> Set[str]:
 
 
 def score_job(job: Job, resume_keywords: Set[str]) -> int:
-    """Score a job 0–100 based on keyword overlap with the resume.
+    """Score a job 0–100 based on how much of the JD you cover.
 
-    The score is: (keywords found in JD / total resume keywords) * 100.
-    A higher score means the JD mentions more of your skills/experience.
+    The score asks: "what fraction of this JD's meaningful terms appear
+    in my resume?" A high score means you already have most of what
+    the job asks for.
     """
     if not resume_keywords:
         return 0
 
-    # Build the JD text to search (title + description).
-    jd_text = "{} {}".format(job.title, job.description).lower()
-    jd_normalised = re.sub(r"[^a-z0-9+#.\-]", " ", jd_text)
-    jd_tokens = set(t.strip(".-") for t in jd_normalised.split())
+    # Extract meaningful terms from the JD the same way we do from the resume.
+    jd_text = "{} {}".format(job.title, job.description)
+    jd_keywords = extract_keywords(jd_text)
 
-    matches = resume_keywords & jd_tokens
-    return round(len(matches) / len(resume_keywords) * 100)
+    if not jd_keywords:
+        return 0
+
+    covered = jd_keywords & resume_keywords
+    return round(len(covered) / len(jd_keywords) * 100)
 
 
 def score_jobs(jobs: List[Job], resume_path: str) -> List[int]:

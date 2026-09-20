@@ -20,7 +20,7 @@ salary_floor_gbp: 35000
 
 # Point this at your resume (.txt or .md) to score jobs 0-100 by keyword match.
 # Or pass --resume on the CLI instead. Leave blank to skip scoring.
-resume_path: ""
+resume_path: "/Users/your-username/Documents/your-cv.md"
 
 # Airtable identifiers (the token is in the AIRTABLE_TOKEN env var, never here).
 airtable:
