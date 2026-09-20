@@ -1,0 +1,42 @@
+{
+  "jobs": [
+    {
+      "id": "aaa-111",
+      "title": "GTM Engineer",
+      "location": "London UK",
+      "publishedAt": "2026-09-01T12:00:00.000+00:00",
+      "isListed": true,
+      "jobUrl": "https://jobs.ashbyhq.com/testco/aaa-111",
+      "applyUrl": "https://jobs.ashbyhq.com/testco/aaa-111/application",
+      "descriptionPlain": "Build GTM tooling.",
+      "descriptionHtml": "<p>Build GTM tooling.</p>",
+      "compensation": {
+        "compensationTierSummary": "GBP 50,000 - 70,000",
+        "scrapeableCompensationSalarySummary": "GBP 50,000 - 70,000",
+        "compensationTiers": [],
+        "summaryComponents": [
+          {
+            "compensationType": "Salary",
+            "interval": "1 YEAR",
+            "currencyCode": "GBP",
+            "minValue": 50000,
+            "maxValue": 70000
+          }
+        ]
+      }
+    },
+    {
+      "id": "bbb-222",
+      "title": "Software Engineer",
+      "location": "Berlin",
+      "publishedAt": "2026-08-20T12:00:00.000+00:00",
+      "isListed": true,
+      "jobUrl": "https://jobs.ashbyhq.com/testco/bbb-222",
+      "applyUrl": "https://jobs.ashbyhq.com/testco/bbb-222/application",
+      "descriptionPlain": "Backend engineer.",
+      "descriptionHtml": "<p>Backend engineer.</p>",
+      "compensation": null
+    }
+  ],
+  "apiVersion": "1"
+}

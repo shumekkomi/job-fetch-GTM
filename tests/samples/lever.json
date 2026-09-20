@@ -1,0 +1,51 @@
+[
+  {
+    "text": "Lifecycle Marketing Manager",
+    "id": "lever-001",
+    "categories": {
+      "location": "London, United Kingdom",
+      "commitment": "Full-time",
+      "team": "Marketing"
+    },
+    "createdAt": 1725235200000,
+    "hostedUrl": "https://jobs.lever.co/testco/lever-001",
+    "applyUrl": "https://jobs.lever.co/testco/lever-001/apply",
+    "descriptionPlain": "Drive lifecycle marketing.",
+    "descriptionBodyPlain": "Drive lifecycle marketing.",
+    "openingPlain": "About the role.",
+    "lists": [
+      {
+        "text": "Requirements",
+        "content": "<li>3+ years experience</li>"
+      }
+    ],
+    "additionalPlain": "Benefits: health insurance.",
+    "country": "GB",
+    "workplaceType": "hybrid",
+    "salaryRange": {
+      "min": 55000,
+      "max": 75000,
+      "currency": "GBP",
+      "interval": "year"
+    }
+  },
+  {
+    "text": "Data Analyst",
+    "id": "lever-002",
+    "categories": {
+      "location": "London, United Kingdom",
+      "commitment": "Full-time",
+      "team": "Data"
+    },
+    "createdAt": 1725321600000,
+    "hostedUrl": "https://jobs.lever.co/testco/lever-002",
+    "applyUrl": "https://jobs.lever.co/testco/lever-002/apply",
+    "descriptionPlain": "Analyse data.",
+    "descriptionBodyPlain": "Analyse data.",
+    "openingPlain": "",
+    "lists": [],
+    "additionalPlain": "",
+    "country": "GB",
+    "workplaceType": "on-site"
+  }
+]

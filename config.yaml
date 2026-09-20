@@ -1,0 +1,363 @@
+# -------------------------------------------------------------------
+# Job Fetcher Configuration
+# -------------------------------------------------------------------
+# This file controls which companies to fetch from, which titles to
+# match, and where to write in Airtable. Edit it freely -- the script
+# reads it fresh on every run.
+#
+# To add a company:
+#   1. Find its ATS (check where "Apply" links point on its careers page).
+#   2. Find its slug (the bit after the ATS domain in the apply URL).
+#   3. Test: curl the endpoint and confirm you get jobs back.
+#   4. Add an entry below under `companies`.
+#
+# To pause a company: change its status to "paused".
+# To mark one as broken: status "broken" (it will be skipped with a note).
+# -------------------------------------------------------------------
+
+default_location: "London"
+salary_floor_gbp: 35000
+
+# Airtable identifiers (the token is in the AIRTABLE_TOKEN env var, never here).
+airtable:
+  base_id: "appXXXXXXXXXXXXXX"
+  jobs_table_id: "tblXXXXXXXXXXXXXX"
+  runlog_table_id: "tblXXXXXXXXXXXXXX"
+
+# -------------------------------------------------------------------
+# Title lanes
+# -------------------------------------------------------------------
+# Case-insensitive substring match. A job whose title contains any of
+# these strings gets tagged with that lane. Order matters: first match wins.
+# -------------------------------------------------------------------
+title_lanes:
+  Growth:
+    - "Growth Marketing Manager"
+    - "Digital Marketing Manager"
+    - "E-commerce Marketing Manager"
+    - "Ecommerce Marketing Manager"
+    - "CRO Manager"
+    - "Conversion Rate Optimisation Manager"
+    - "Conversion Rate Optimization Manager"
+    - "Lifecycle Marketing Manager"
+    - "Marketing Automation Manager"
+  Performance:
+    - "Performance Marketing Manager"
+    - "Paid Media Manager"
+    - "SEM Manager"
+    - "PPC Manager"
+  GTM Engineering:
+    - "GTM Engineer"
+    - "Go-to-Market Engineer"
+    - "Growth Engineer"
+    - "Marketing Engineer"
+    - "Marketing Automation Engineer"
+    - "RevOps Engineer"
+    - "Revenue Operations Engineer"
+    - "Marketing Operations Manager"
+    - "Forward Deployed Engineer"
+
+# -------------------------------------------------------------------
+# Company watchlist
+# -------------------------------------------------------------------
+# Fields:
+#   name:           display name (used in Airtable and logs)
+#   ats:            adapter to use (greenhouse, ashby, lever, smartrecruiters,
+#                   personio, jsonld, workable, recruitee)
+#   slug:           board identifier for the ATS API (for jsonld: the full URL)
+#   careers_url:    the public careers page (for reference only)
+#   tier:           priority (1 = most important, 2 = secondary, 3 = nice to have)
+#   status:         active / paused / broken / unsupported
+#   location_aliases: extra strings that count as "London" for this company
+#   keep_unqualified_remote: if true, keep remote roles with no region stated
+# -------------------------------------------------------------------
+companies:
+
+  # ==================== TIER 1: Core martech vendors ====================
+
+  - name: "Braze"
+    ats: greenhouse
+    slug: "braze"
+    careers_url: "https://www.braze.com/careers"
+    tier: 1
+    status: active
+
+  - name: "Klaviyo"
+    ats: greenhouse
+    slug: "klaviyo"
+    careers_url: "https://www.klaviyo.com/careers"
+    tier: 1
+    status: active
+
+  - name: "Iterable"
+    ats: greenhouse
+    slug: "iterable"
+    careers_url: "https://iterable.com/careers/"
+    tier: 1
+    status: active
+
+  - name: "Bloomreach"
+    ats: greenhouse
+    slug: "bloomreach"
+    careers_url: "https://www.bloomreach.com/en/careers"
+    tier: 1
+    status: active
+    # Bloomreach lists UK roles as "United Kingdom", not "London".
+    location_aliases:
+      - "United Kingdom"
+
+  - name: "Intercom"
+    ats: greenhouse
+    slug: "intercom"
+    careers_url: "https://www.intercom.com/careers"
+    tier: 1
+    status: active
+
+  - name: "Mixpanel"
+    ats: greenhouse
+    slug: "mixpanel"
+    careers_url: "https://mixpanel.com/jobs/"
+    tier: 1
+    status: active
+
+  - name: "Amplitude"
+    ats: greenhouse
+    slug: "amplitude"
+    careers_url: "https://amplitude.com/careers"
+    tier: 1
+    status: active
+
+  - name: "Contentful"
+    ats: greenhouse
+    slug: "contentful"
+    careers_url: "https://www.contentful.com/careers/"
+    tier: 1
+    status: active
+
+  - name: "Pendo"
+    ats: greenhouse
+    slug: "pendo"
+    careers_url: "https://www.pendo.io/company/careers/"
+    tier: 1
+    status: active
+
+  - name: "Jack & Jill"
+    ats: ashby
+    slug: "jack-jill-external-ats"
+    careers_url: "https://jobs.ashbyhq.com/jack-jill-external-ats"
+    tier: 1
+    status: active
+
+  - name: "HubSpot"
+    ats: greenhouse
+    slug: "hubspot"
+    careers_url: "https://www.hubspot.com/careers/jobs"
+    tier: 1
+    status: broken
+    # 20 Sep 2026: GH board returns 200 with empty jobs array.
+    # Not on Lever or Ashby. Careers page uses a proprietary system.
+    # Needs manual re-resolution.
+
+  # ==================== TIER 2: Secondary targets ====================
+
+  - name: "Twilio"
+    ats: greenhouse
+    slug: "twilio"
+    careers_url: "https://www.twilio.com/en-us/company/jobs"
+    tier: 2
+    status: active
+    # Segment is part of Twilio; their roles appear on the Twilio board.
+
+  - name: "Similarweb"
+    ats: greenhouse
+    slug: "similarweb"
+    careers_url: "https://www.similarweb.com/corp/careers/"
+    tier: 2
+    status: active
+    # Keep remote roles open to UK/EMEA.
+    keep_unqualified_remote: true
+
+  - name: "Freshworks"
+    ats: smartrecruiters
+    slug: "freshworks"
+    careers_url: "https://www.freshworks.com/company/careers/"
+    tier: 2
+    status: active
+
+  - name: "Ometria"
+    ats: greenhouse
+    slug: ""
+    careers_url: "https://ometria.com/careers"
+    tier: 2
+    status: unsupported
+    # 20 Sep 2026: not on GH/Ashby/Lever/SR. No JSON-LD on careers page.
+
+  - name: "Insider"
+    ats: greenhouse
+    slug: ""
+    careers_url: "https://useinsider.com/careers/"
+    tier: 2
+    status: unsupported
+    # 20 Sep 2026: GH slug "insider" is Business Insider, not this company.
+    # Not on Lever/Ashby/SR. No public ATS found.
+
+  - name: "AB Tasty"
+    ats: greenhouse
+    slug: ""
+    careers_url: "https://www.abtasty.com/careers/"
+    tier: 2
+    status: unsupported
+    # 20 Sep 2026: not on GH/Ashby/Lever. No JSON-LD on careers page.
+
+  - name: "MoEngage"
+    ats: greenhouse
+    slug: ""
+    careers_url: "https://www.moengage.com/careers/"
+    tier: 2
+    status: unsupported
+    # 20 Sep 2026: not on GH/Ashby/Lever. No JSON-LD on careers page.
+
+  - name: "Optimizely"
+    ats: greenhouse
+    slug: ""
+    careers_url: "https://www.optimizely.com/careers/"
+    tier: 2
+    status: unsupported
+    # Uses Jobvite (probably). GH board empty. No public API found.
+
+  - name: "Dynamic Yield"
+    ats: greenhouse
+    slug: ""
+    careers_url: "https://www.dynamicyield.com/company/careers/"
+    tier: 2
+    status: unsupported
+    # Now part of Mastercard. Uses Mastercard's Workday instance.
+
+  - name: "Shopify"
+    ats: greenhouse
+    slug: ""
+    careers_url: "https://www.shopify.com/careers"
+    tier: 2
+    status: unsupported
+    # 20 Sep 2026: not on GH/Ashby/Lever/SR. Likely proprietary ATS.
+
+  # ==================== TIER 3: Emerging / interesting ====================
+
+  - name: "Synthesia"
+    ats: ashby
+    slug: "synthesia"
+    careers_url: "https://www.synthesia.io/careers"
+    tier: 3
+    status: active
+
+  - name: "ElevenLabs"
+    ats: ashby
+    slug: "elevenlabs"
+    careers_url: "https://elevenlabs.io/careers"
+    tier: 3
+    status: active
+
+  - name: "PolyAI"
+    ats: greenhouse
+    slug: "polyai"
+    careers_url: "https://poly.ai/careers/"
+    tier: 3
+    status: active
+
+  - name: "Legora"
+    ats: ashby
+    slug: "legora"
+    careers_url: "https://www.legora.com/careers"
+    tier: 3
+    status: active
+
+  - name: "Tractable"
+    ats: ashby
+    slug: "tractable"
+    careers_url: "https://www.tractable.ai/careers"
+    tier: 3
+    status: active
+
+  - name: "Paddle"
+    ats: ashby
+    slug: "paddle"
+    careers_url: "https://www.paddle.com/careers"
+    tier: 3
+    status: active
+
+  - name: "GoCardless"
+    ats: greenhouse
+    slug: "gocardless"
+    careers_url: "https://gocardless.com/about/careers/"
+    tier: 3
+    status: active
+
+  - name: "Multiverse"
+    ats: ashby
+    slug: "multiverse"
+    careers_url: "https://www.multiverse.io/en-GB/careers"
+    tier: 3
+    status: active
+
+  - name: "Robin AI"
+    ats: greenhouse
+    slug: ""
+    careers_url: "https://www.robinai.com/company/careers"
+    tier: 3
+    status: unsupported
+    # 20 Sep 2026: not on GH/Ashby/Lever. No public ATS found.
+
+  - name: "Cleo"
+    ats: greenhouse
+    slug: ""
+    careers_url: "https://web.meetcleo.com/careers"
+    tier: 3
+    status: unsupported
+    # 20 Sep 2026: not on GH/Ashby/Lever. No public ATS found.
+
+  - name: "Sana"
+    ats: greenhouse
+    slug: ""
+    careers_url: "https://www.sanalabs.com/company/careers"
+    tier: 3
+    status: unsupported
+    # 20 Sep 2026: not on GH/Ashby/Lever. No public ATS found.
+
+  # ==================== LINKEDIN DISCOVERY ====================
+  # These search LinkedIn by title keyword. They find jobs from ANY company,
+  # not just the watchlist above. One entry per search query.
+
+  - name: "LinkedIn: GTM Engineer"
+    ats: linkedin
+    slug: "GTM Engineer"
+    careers_url: ""
+    tier: 1
+    status: active
+
+  - name: "LinkedIn: Growth Marketing Manager"
+    ats: linkedin
+    slug: "Growth Marketing Manager"
+    careers_url: ""
+    tier: 1
+    status: active
+
+  - name: "LinkedIn: Performance Marketing Manager"
+    ats: linkedin
+    slug: "Performance Marketing Manager"
+    careers_url: ""
+    tier: 1
+    status: active
+
+  - name: "LinkedIn: Marketing Automation Manager"
+    ats: linkedin
+    slug: "Marketing Automation Manager"
+    careers_url: ""
+    tier: 2
+    status: active
+
+  - name: "LinkedIn: RevOps Engineer"
+    ats: linkedin
+    slug: "RevOps Engineer"
+    careers_url: ""
+    tier: 2
+    status: active
