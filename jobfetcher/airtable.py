@@ -46,7 +46,7 @@ JOB_FIELDS = {
     "lane":          "fldCRFaPZ8MfRXtbl",
     "status":        "fldPK1IeeTrVwBfZR",
     "notes":         "fldfFzwUoLMk8GYkV",
-    "match_score":   "",  # CREATE a "Match Score" number field in Airtable, paste its field ID here
+    "match_score":   "fldGGUQcnRn3gHsA8",
 }
 
 # -- Field IDs for the Run Log table --
