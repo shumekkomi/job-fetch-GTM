@@ -32,31 +32,31 @@ REQUEST_DELAY = 0.25  # seconds between requests, keeps us under 5/s
 
 # -- Field IDs for the Jobs table --
 JOB_FIELDS = {
-    "job_primary":   "fldmygNidkQ7KeaHn",
-    "title":         "fldh2stLj1FrucnK3",
-    "company":       "fldpGSX7O2l7eKsE0",
-    "source":        "fld9bg6lpxhhzw6Xx",
-    "jd_text":       "fldqA2HFSme5kdyjt",
-    "raw_blob":      "fldNmJPWJQG1r8Ilr",
-    "original_url":  "fldnZkwEp97D57e8b",
-    "salary":        "fldBkmqtisdpKjFar",
-    "location":      "fldZXZhjC9CNDmNbX",
-    "posted_date":   "fldHGLX1II4sB4kPA",
-    "fingerprint":   "fldcFMpNfGaOu7KuZ",
-    "lane":          "fldCRFaPZ8MfRXtbl",
-    "status":        "fldPK1IeeTrVwBfZR",
-    "notes":         "fldfFzwUoLMk8GYkV",
-    "match_score":   "fldGGUQcnRn3gHsA8",
+    "job_primary":   "fldtZSpK5XE4fkUg9",
+    "title":         "flduJzdNkQWPVaehT",
+    "company":       "fldLJckdiRtqaVSpm",
+    "source":        "fldkpfjIVp19SWtN4",
+    "jd_text":       "fldaN5Oosawss9Wjc",
+    "raw_blob":      "fldsSq7sU9ycWYRJ0",
+    "original_url":  "fld5PZIbH3efTGxLm",
+    "salary":        "fld4bedksGcm1lMJt",
+    "location":      "fldQkzBzFG6PN6gPY",
+    "posted_date":   "fldTdYhQn77uaJj4Q",
+    "fingerprint":   "fldlPZw7KTUKaBOLl",
+    "lane":          "fldfM5F2tBxUNcBY5",
+    "status":        "fld4W4nBr0aS5Gs08",
+    "notes":         "fldqhba4vC6hPr2cW",
+    "match_score":   "fldCdPURXM56fnXos",
 }
 
 # -- Field IDs for the Run Log table --
 RUNLOG_FIELDS = {
-    "target":        "fldmgPF5xpcxBjXMV",
-    "type":          "fld15L5WNjHKBV9zL",
-    "last_polled":   "fldVk6bIg1X0ffkJt",
-    "outcome":       "fldQhXM2aa4j9r7gc",
-    "listings_found": "fld2xyAXHW7bdDU1y",
-    "notes":         "fld93cwVv3qS07p7B",
+    "target":        "fldG8BflB9Xumc8Kg",
+    "type":          "fldn1NMD8MzbC4mfV",
+    "last_polled":   "fldTNBFEl1KqYrVWc",
+    "outcome":       "fldSgyKYKA2MOkdSb",
+    "listings_found": "fldj1Po3KoO1dwOOy",
+    "notes":         "fldOxKBm29HLnq6Ie",
 }
 
 
