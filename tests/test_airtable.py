@@ -26,15 +26,15 @@ def _fake_airtable_get(url, headers=None, params=None, timeout=None):
     names = {"original_url": "Original URL", "company": "Company", "title": "Title"}
     by_id = (params or {}).get("returnFieldsByFieldId") == "true"
     fields = {
-        (JOB_FIELDS[key] if by_id else names[key]): value for key, value in _ROW.items()
+        ("fld" + key if by_id else names[key]): value for key, value in _ROW.items()
     }
     return _FakeResponse({"records": [{"id": "rec1", "fields": fields}]})
 
 
 class TestFetchExistingJobs:
     def test_reads_existing_records(self, monkeypatch):
-        # Regression: without returnFieldsByFieldId, every lookup missed and
-        # each daily run re-inserted every job it had already saved.
+        # Regression: when the request and the lookups disagreed on names vs
+        # IDs, every lookup missed and each daily run re-inserted every job.
         monkeypatch.setenv("AIRTABLE_TOKEN", "test-token")
         monkeypatch.setattr(airtable.requests, "get", _fake_airtable_get)
 
@@ -55,3 +55,26 @@ class TestJobToRecord:
     def test_source_can_be_linkedin(self):
         fields = _job_to_record(self._job(), source="LinkedIn")["fields"]
         assert fields[JOB_FIELDS["source"]] == "LinkedIn"
+
+
+class TestWritesAreForkFriendly:
+    def test_uses_field_names_and_typecast(self, monkeypatch):
+        # Field names (not one base's field IDs) and typecast are what let
+        # someone else's base work without editing the code.
+        sent = {}
+
+        def fake_post(url, headers=None, json=None, timeout=None):
+            sent.update(json)
+            return _FakeResponse({"records": [{"id": "rec1"}]})
+
+        monkeypatch.setenv("AIRTABLE_TOKEN", "test-token")
+        monkeypatch.setattr(airtable.requests, "post", fake_post)
+        monkeypatch.setattr(airtable, "REQUEST_DELAY", 0)
+
+        job = Job(title="GTM Engineer", company="TestCo", url="https://example.com/1")
+        airtable.insert_jobs("appTEST", "tblTEST", [job])
+
+        assert sent["typecast"] is True
+        fields = sent["records"][0]["fields"]
+        assert fields["Original URL"] == "https://example.com/1"
+        assert not any(key.startswith("fld") for key in fields)

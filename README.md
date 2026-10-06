@@ -17,7 +17,7 @@ The first version was a Claude skill that fetched, cleaned and wrote records thr
 | Active sources | 26 (13 Greenhouse boards, 7 Ashby boards, 1 SmartRecruiters board, 5 LinkedIn title searches) |
 | Companies checked and logged as having no public ATS | 10 |
 | ATS adapters | Greenhouse, Ashby, Lever, SmartRecruiters, Personio, generic schema.org JSON-LD, LinkedIn guest search |
-| Tests | 82, run before every scheduled fetch |
+| Tests | 83, run before every scheduled fetch |
 
 ## How it works
 
@@ -35,7 +35,7 @@ These came from real runs, not from planning.
 - **Companies with no public ATS.** Ten watchlist companies (proprietary systems, Workday, Jobvite) cannot be polled. They stay in config with status `unsupported` and a dated note on what was checked, so they are not silently missing.
 - **Partial failures.** One source timing out or 404ing does not stop the run. It gets a Failed row in the Run Log and the rest carry on.
 - **Runs that pass while writing nothing.** For the first week the Airtable token was wrong, so every write got `403 Forbidden`. The script logged the errors and exited normally, so GitHub showed every run as passed. Now the run stops if it cannot read Airtable, and exits with an error if any write fails, which turns the run red and sends an email.
-- **A duplicate check that never matched.** Airtable returns record fields keyed by field name unless the request asks for field IDs. The code looked fields up by ID, so it always saw an empty table and saved every job again each day: 476 of 556 rows were duplicates by the time it was caught. The request now asks for IDs, a test fakes Airtable's behaviour to keep it that way, and the duplicates were removed.
+- **A duplicate check that never matched.** Airtable returns record fields keyed by field name unless the request asks for field IDs. The code looked fields up by ID, so it always saw an empty table and saved every job again each day: 476 of 556 rows were duplicates by the time it was caught. The code now uses field names everywhere (which also lets anyone run it against their own base), a test fakes Airtable's behaviour so a names-versus-IDs mismatch fails the build, and the duplicates were removed.
 
 ## Known limitations
 
@@ -70,24 +70,67 @@ tests/
 
 ## Running it yourself
 
+Python 3.12. A dry run needs nothing else: no Airtable, no token, no CV.
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
 python -m pytest tests/ -v      # tests
-python run.py --dry-run         # fetch and filter, no Airtable needed
-
-export AIRTABLE_TOKEN="pat..."             # personal access token
-export AIRTABLE_BASE_ID="app..."           # from the base's URL
-export AIRTABLE_JOBS_TABLE_ID="tbl..."
-export AIRTABLE_RUNLOG_TABLE_ID="tbl..."
-python run.py                              # real run
+python run.py --dry-run         # fetch and filter, print what would be saved
 ```
 
-The token needs `data.records:read` and `data.records:write` on the target base. None of these four values are in the repo: on GitHub they are Actions secrets, which also keeps them masked in the public run logs. A real run stops straight away if any is missing.
+### Saving to your own Airtable
 
-To turn on resume scoring, put your CV (as `.md` or `.txt`) at `private/cv.md`, or pass `--resume path/to/cv.md`. The `private/` folder is git-ignored.
+1. In a base of your own, create the two tables below. Field names must match exactly (the code finds fields by name); the order doesn't matter, and extra fields are ignored.
+2. Create a [personal access token](https://airtable.com/create/tokens) with `data.records:read` and `data.records:write`, limited to that base.
+3. Copy the base ID (`app...`) and the two table IDs (`tbl...`) from the table URLs, then:
+
+```bash
+export AIRTABLE_TOKEN="pat..."
+export AIRTABLE_BASE_ID="app..."
+export AIRTABLE_JOBS_TABLE_ID="tbl..."
+export AIRTABLE_RUNLOG_TABLE_ID="tbl..."
+python run.py
+```
+
+A real run stops straight away if any of the four is missing. None of them are in this repo.
+
+**Jobs table**
+
+| Field | Type | Notes |
+|---|---|---|
+| Job | Single line text | Primary field. Written as "Company — Title" |
+| Title, Company, Salary, Location, Fingerprint | Single line text | |
+| JD Text, Raw Blob, Notes | Long text | |
+| Original URL | URL | Used for deduplication |
+| Posted Date | Date | |
+| Source | Single select | Direct, LinkedIn |
+| Lane | Single select | One option per lane in `config.yaml` |
+| Status | Single select | New (add your own, e.g. Applied) |
+| Match Score | Number (integer) | Only filled when a CV is present |
+
+**Run Log table**
+
+| Field | Type | Notes |
+|---|---|---|
+| Target | Single line text | Primary field |
+| Type | Single select | ATS, Web search, Board |
+| Last Polled | Date | |
+| Outcome | Single select | OK, Empty, Failed, Skipped |
+| Listings Found | Number (integer) | |
+| Notes | Long text | |
+
+Missing dropdown options are added automatically on the first save (the API's `typecast` option), so the lists above can start empty.
+
+### Running it on a fork
+
+Add the same four values as Actions secrets in your fork (Settings, then Secrets and variables, then Actions). GitHub switches off scheduled workflows on forks, so turn it on once from the Actions tab. "Run workflow" there starts a run straight away.
+
+### Resume scoring
+
+Put your CV (as `.md` or `.txt`) at `private/cv.md`, or pass `--resume path/to/cv.md`. The `private/` folder is git-ignored. Without a CV, scoring is skipped.
 
 ### Adding a company
 

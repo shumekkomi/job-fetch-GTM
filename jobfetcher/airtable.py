@@ -30,33 +30,37 @@ MAX_RECORDS_PER_REQUEST = 10
 MAX_FIELD_LENGTH = 100_000  # Airtable long text limit
 REQUEST_DELAY = 0.25  # seconds between requests, keeps us under 5/s
 
-# -- Field IDs for the Jobs table --
+# Fields are referred to by NAME, not by Airtable's field IDs, so anyone can
+# create tables with these names (see README) and the code works unchanged.
+# The cost: renaming a field in Airtable means renaming it here too.
+
+# -- Jobs table --
 JOB_FIELDS = {
-    "job_primary":   "fldtZSpK5XE4fkUg9",
-    "title":         "flduJzdNkQWPVaehT",
-    "company":       "fldLJckdiRtqaVSpm",
-    "source":        "fldkpfjIVp19SWtN4",
-    "jd_text":       "fldaN5Oosawss9Wjc",
-    "raw_blob":      "fldsSq7sU9ycWYRJ0",
-    "original_url":  "fld5PZIbH3efTGxLm",
-    "salary":        "fld4bedksGcm1lMJt",
-    "location":      "fldQkzBzFG6PN6gPY",
-    "posted_date":   "fldTdYhQn77uaJj4Q",
-    "fingerprint":   "fldlPZw7KTUKaBOLl",
-    "lane":          "fldfM5F2tBxUNcBY5",
-    "status":        "fld4W4nBr0aS5Gs08",
-    "notes":         "fldqhba4vC6hPr2cW",
-    "match_score":   "fldCdPURXM56fnXos",
+    "job_primary":    "Job",
+    "title":          "Title",
+    "company":        "Company",
+    "source":         "Source",
+    "jd_text":        "JD Text",
+    "raw_blob":       "Raw Blob",
+    "original_url":   "Original URL",
+    "salary":         "Salary",
+    "location":       "Location",
+    "posted_date":    "Posted Date",
+    "fingerprint":    "Fingerprint",
+    "lane":           "Lane",
+    "status":         "Status",
+    "notes":          "Notes",
+    "match_score":    "Match Score",
 }
 
-# -- Field IDs for the Run Log table --
+# -- Run Log table --
 RUNLOG_FIELDS = {
-    "target":        "fldG8BflB9Xumc8Kg",
-    "type":          "fldn1NMD8MzbC4mfV",
-    "last_polled":   "fldTNBFEl1KqYrVWc",
-    "outcome":       "fldSgyKYKA2MOkdSb",
-    "listings_found": "fldj1Po3KoO1dwOOy",
-    "notes":         "fldOxKBm29HLnq6Ie",
+    "target":         "Target",
+    "type":           "Type",
+    "last_polled":    "Last Polled",
+    "outcome":        "Outcome",
+    "listings_found": "Listings Found",
+    "notes":          "Notes",
 }
 
 
@@ -102,10 +106,9 @@ def fetch_existing_jobs(base_id: str, table_id: str) -> Tuple[Set[str], Set[str]
             JOB_FIELDS["company"],
             JOB_FIELDS["title"],
         ],
-        # Airtable keys the returned fields by NAME unless told otherwise. We look
-        # them up by ID below, so without this every lookup misses and dedup sees
-        # an empty table.
-        "returnFieldsByFieldId": "true",
+        # Don't add returnFieldsByFieldId here: Airtable would then key the
+        # returned fields by ID, the name lookups below would all miss, and
+        # dedup would see an empty table (this happened once; a test guards it).
     }
 
     offset = None
@@ -150,7 +153,7 @@ def _truncate(text: str, max_len: int = MAX_FIELD_LENGTH, label: str = "") -> st
 
 
 def _job_to_record(job: Job, source: str = "Direct") -> Dict[str, Any]:
-    """Convert a Job into an Airtable record payload using field IDs."""
+    """Convert a Job into an Airtable record payload keyed by field name."""
     raw_json = json.dumps(job.raw, ensure_ascii=False, default=str)
 
     fields: Dict[str, Any] = {
@@ -185,7 +188,9 @@ def insert_jobs(base_id: str, table_id: str, jobs: List[Job], source: str = "Dir
 
     for i in range(0, len(jobs), MAX_RECORDS_PER_REQUEST):
         batch = jobs[i : i + MAX_RECORDS_PER_REQUEST]
-        payload = {"records": [_job_to_record(j, source) for j in batch]}
+        # typecast lets Airtable add a dropdown option it hasn't seen yet (a new
+        # lane, say) instead of rejecting the whole batch.
+        payload = {"records": [_job_to_record(j, source) for j in batch], "typecast": True}
 
         response = requests.post(url, headers=_headers(), json=payload, timeout=30)
         response.raise_for_status()
@@ -238,7 +243,7 @@ def insert_run_log(
     if note:
         fields[RUNLOG_FIELDS["notes"]] = _truncate(note, label="run log note")
 
-    payload = {"records": [{"fields": fields}]}
+    payload = {"records": [{"fields": fields}], "typecast": True}
     response = requests.post(url, headers=_headers(), json=payload, timeout=30)
     response.raise_for_status()
     time.sleep(REQUEST_DELAY)
