@@ -79,16 +79,14 @@ def load_config(path: str = "config.yaml") -> Config:
     if not title_lanes:
         raise ValueError("Config must have at least one entry in 'title_lanes'")
 
-    # -- Airtable --
-    airtable = raw.get("airtable", {})
-
     return Config(
         companies=companies,
         title_lanes=title_lanes,
         default_location=raw.get("default_location", "London"),
         salary_floor_gbp=float(raw.get("salary_floor_gbp", 35000)),
-        airtable_base_id=airtable.get("base_id", ""),
-        airtable_jobs_table_id=airtable.get("jobs_table_id", ""),
-        airtable_runlog_table_id=airtable.get("runlog_table_id", ""),
+        # From the environment so the public repo doesn't reveal which base to target.
+        airtable_base_id=os.environ.get("AIRTABLE_BASE_ID", ""),
+        airtable_jobs_table_id=os.environ.get("AIRTABLE_JOBS_TABLE_ID", ""),
+        airtable_runlog_table_id=os.environ.get("AIRTABLE_RUNLOG_TABLE_ID", ""),
         resume_path=raw.get("resume_path"),
     )

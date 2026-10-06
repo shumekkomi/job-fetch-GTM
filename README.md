@@ -17,7 +17,7 @@ The first version was a Claude skill that fetched, cleaned and wrote records thr
 | Active sources | 26 (13 Greenhouse boards, 7 Ashby boards, 1 SmartRecruiters board, 5 LinkedIn title searches) |
 | Companies checked and logged as having no public ATS | 10 |
 | ATS adapters | Greenhouse, Ashby, Lever, SmartRecruiters, Personio, generic schema.org JSON-LD, LinkedIn guest search |
-| Tests | 70, run before every scheduled fetch |
+| Tests | 82, run before every scheduled fetch |
 
 ## How it works
 
@@ -48,8 +48,8 @@ These came from real runs, not from planning.
 
 ```
 run.py                          Entry point. --dry-run to test without writing.
-config.yaml                     Watchlist, title lanes, Airtable IDs.
-requirements.txt                Python dependencies (requests, pyyaml, pytest).
+config.yaml                     Watchlist, title lanes, salary floor.
+requirements.txt                Exact versions of every dependency.
 jobfetcher/
     config.py                   Loads and validates config.yaml.
     models.py                   Job and CompanyResult data shapes.
@@ -76,12 +76,16 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 python -m pytest tests/ -v      # tests
-python run.py --dry-run         # fetch and filter, no Airtable writes
-export AIRTABLE_TOKEN="pat..."  # Airtable personal access token
-python run.py                   # real run
+python run.py --dry-run         # fetch and filter, no Airtable needed
+
+export AIRTABLE_TOKEN="pat..."             # personal access token
+export AIRTABLE_BASE_ID="app..."           # from the base's URL
+export AIRTABLE_JOBS_TABLE_ID="tbl..."
+export AIRTABLE_RUNLOG_TABLE_ID="tbl..."
+python run.py                              # real run
 ```
 
-The token needs `data.records:read` and `data.records:write` on the target base. On GitHub it is stored as the `AIRTABLE_TOKEN` Actions secret and never committed.
+The token needs `data.records:read` and `data.records:write` on the target base. None of these four values are in the repo: on GitHub they are Actions secrets, which also keeps them masked in the public run logs. A real run stops straight away if any is missing.
 
 To turn on resume scoring, put your CV (as `.md` or `.txt`) at `private/cv.md`, or pass `--resume path/to/cv.md`. The `private/` folder is git-ignored.
 

@@ -21,11 +21,13 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      # Actions are pinned to exact commits: a tag like v4 can be moved to new
+      # code by whoever controls it, a commit hash cannot.
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
 
@@ -35,7 +37,12 @@ jobs:
       - name: Run tests
         run: python -m pytest tests/ -v
 
+      # Stored as secrets rather than in config.yaml so the public repo and
+      # the public run logs (secrets are masked) never show which base to target.
       - name: Fetch jobs
         env:
           AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+          AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
+          AIRTABLE_JOBS_TABLE_ID: ${{ secrets.AIRTABLE_JOBS_TABLE_ID }}
+          AIRTABLE_RUNLOG_TABLE_ID: ${{ secrets.AIRTABLE_RUNLOG_TABLE_ID }}
         run: python run.py

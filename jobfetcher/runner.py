@@ -66,6 +66,15 @@ def run(config: Config, dry_run: bool = False, resume_path: Optional[str] = None
     existing_urls: Set[str] = set()
     existing_company_titles: Set[str] = set()
     if not dry_run:
+        missing = [name for name, value in (
+            ("AIRTABLE_BASE_ID", config.airtable_base_id),
+            ("AIRTABLE_JOBS_TABLE_ID", config.airtable_jobs_table_id),
+            ("AIRTABLE_RUNLOG_TABLE_ID", config.airtable_runlog_table_id),
+        ) if not value]
+        if missing:
+            logger.error("Stopping: environment variables not set: %s", ", ".join(missing))
+            summary["aborted"] = True
+            return summary
         try:
             logger.info("Fetching existing Airtable records for dedup...")
             existing_urls, existing_company_titles = fetch_existing_jobs(

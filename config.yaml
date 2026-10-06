@@ -24,11 +24,10 @@ salary_floor_gbp: 35000
 # GitHub Actions), scoring is skipped with a warning.
 resume_path: "private/cv.md"
 
-# Airtable identifiers (the token is in the AIRTABLE_TOKEN env var, never here).
-airtable:
-  base_id: "appXXXXXXXXXXXXXX"
-  jobs_table_id: "tblXXXXXXXXXXXXXX"
-  runlog_table_id: "tblXXXXXXXXXXXXXX"
+# Airtable location and access come from environment variables, not this file,
+# so the public repo doesn't point at anyone's base:
+#   AIRTABLE_TOKEN, AIRTABLE_BASE_ID, AIRTABLE_JOBS_TABLE_ID, AIRTABLE_RUNLOG_TABLE_ID
+# Only real runs need them. --dry-run works without.
 
 # -------------------------------------------------------------------
 # Title lanes

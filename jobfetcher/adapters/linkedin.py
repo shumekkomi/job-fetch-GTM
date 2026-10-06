@@ -19,6 +19,7 @@ import re
 import time
 from html.parser import HTMLParser
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from ..http import get
 from ..models import CompanyResult, FetchError, Job
@@ -28,6 +29,16 @@ SEARCH_URL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/se
 RESULTS_PER_PAGE = 10
 MAX_PAGES = 3
 REQUEST_DELAY = 1.0  # be polite to LinkedIn
+
+
+def _is_linkedin_url(url: str) -> bool:
+    """Only follow https links on linkedin.com or its subdomains (e.g. uk.linkedin.com).
+
+    Job links come from scraped HTML, so we don't fetch whatever a card points at.
+    """
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return parsed.scheme == "https" and (host == "linkedin.com" or host.endswith(".linkedin.com"))
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +178,7 @@ def fetch(slug: str, company: str) -> CompanyResult:
     jobs: List[Job] = []
     for card in all_cards:
         url = card.get("url", "")
-        if not url:
+        if not _is_linkedin_url(url):
             continue
 
         detail = _fetch_job_detail(url)

@@ -4,11 +4,40 @@ from jobfetcher.config import Company, Config
 from jobfetcher.runner import exit_code, run
 
 
-def _config():
+def _config(**airtable_ids):
+    ids = {
+        "airtable_base_id": "appTEST",
+        "airtable_jobs_table_id": "tblJOBS",
+        "airtable_runlog_table_id": "tblLOG",
+    }
+    ids.update(airtable_ids)
     return Config(
         companies=[Company(name="TestCo", ats="greenhouse", slug="testco")],
         title_lanes={"Growth": ["Growth Marketing Manager"]},
+        **ids,
     )
+
+
+def _block_airtable(monkeypatch):
+    def must_not_call(*args, **kwargs):
+        raise AssertionError("Airtable should not be called")
+
+    for name in ("fetch_existing_jobs", "insert_jobs", "insert_run_log"):
+        monkeypatch.setattr(runner, name, must_not_call)
+
+
+class TestRunStopsWithoutAirtableIds:
+    def test_missing_base_id_stops_before_any_request(self, monkeypatch):
+        _block_airtable(monkeypatch)
+        summary = run(_config(airtable_base_id=""))
+        assert summary["aborted"] is True
+        assert exit_code(summary) == 1
+
+    def test_dry_run_does_not_need_ids(self, monkeypatch):
+        _block_airtable(monkeypatch)
+        monkeypatch.setattr(runner, "ADAPTERS", {})  # no network: company fails as unknown ATS
+        summary = run(_config(airtable_base_id=""), dry_run=True)
+        assert summary["aborted"] is False
 
 
 class TestRunStopsWhenAirtableUnreadable:
