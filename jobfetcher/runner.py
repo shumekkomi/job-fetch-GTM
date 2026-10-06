@@ -7,19 +7,21 @@ This is the file that `run.py` calls. It orchestrates each step in order:
   4. Write the run log.
 
 Each company runs independently: one failing does not stop the others.
+The exception is Airtable itself: if the existing records cannot be read, the
+run stops before writing anything, because writing blind creates duplicates.
 """
 from __future__ import annotations
 
 import logging
 import sys
-from typing import List, Optional, Set, Tuple
+from typing import Optional, Set
 
 from .adapters import ADAPTERS
 from .airtable import fetch_existing_jobs, insert_jobs, insert_run_log
 from .config import Company, Config
-from .dedup import DedupResult, dedup
-from .filters import FilterStats, filter_jobs
-from .models import CompanyResult, Job
+from .dedup import dedup
+from .filters import filter_jobs
+from .models import CompanyResult
 from .resume import extract_keywords, load_resume, score_job
 
 logger = logging.getLogger("jobfetcher")
@@ -32,7 +34,7 @@ def _setup_logging() -> None:
     logger.setLevel(logging.INFO)
 
 
-def run(config: Config, dry_run: bool = False, resume_path: str = None) -> dict:
+def run(config: Config, dry_run: bool = False, resume_path: Optional[str] = None) -> dict:
     """Run the full pipeline. Returns a summary dict for testing/inspection.
 
     If dry_run is True, fetches and filters but writes nothing to Airtable.
@@ -45,6 +47,8 @@ def run(config: Config, dry_run: bool = False, resume_path: str = None) -> dict:
         "total_new_jobs": 0,
         "results": [],    # one dict per company
         "dry_run": dry_run,
+        "aborted": False,
+        "airtable_errors": 0,
     }
 
     # -- Load resume keywords if a resume was provided --
@@ -73,7 +77,9 @@ def run(config: Config, dry_run: bool = False, resume_path: str = None) -> dict:
             )
         except Exception as exc:
             logger.error("Could not fetch existing records: %s", exc)
-            logger.info("Continuing without dedup (all jobs will be treated as new)")
+            logger.error("Stopping: without dedup every job would be written again.")
+            summary["aborted"] = True
+            return summary
 
     # -- Step 2: process each company --
     active_companies = [c for c in config.companies if c.status == "active"]
@@ -97,21 +103,16 @@ def run(config: Config, dry_run: bool = False, resume_path: str = None) -> dict:
 
     # -- Step 3: log skipped companies --
     for company in skipped_companies:
-        if not dry_run:
-            try:
-                insert_run_log(
-                    config.airtable_base_id, config.airtable_runlog_table_id,
-                    company=company.name, ats=company.ats,
-                    outcome="Skipped", new_count=0,
-                    note="Status: {}".format(company.status),
-                )
-            except Exception as exc:
-                logger.error("Could not write run log for %s: %s", company.name, exc)
-
-        summary["results"].append({
+        result = {
             "company": company.name, "outcome": "Skipped",
             "note": "Status: {}".format(company.status), "new_count": 0,
-        })
+        }
+        _log_run(config, company, result, dry_run)
+        summary["results"].append(result)
+
+    summary["airtable_errors"] = sum(1 for r in summary["results"] if r.get("airtable_error"))
+    if summary["airtable_errors"]:
+        logger.error("%d Airtable writes failed. See the errors above.", summary["airtable_errors"])
 
     logger.info(
         "Done. %d companies processed, %d new jobs %s.",
@@ -208,7 +209,8 @@ def _process_company(
         else:
             try:
                 created = insert_jobs(
-                    config.airtable_base_id, config.airtable_jobs_table_id, new_jobs
+                    config.airtable_base_id, config.airtable_jobs_table_id, new_jobs,
+                    source="LinkedIn" if company.ats == "linkedin" else "Direct",
                 )
                 logger.info("%s: inserted %d new jobs", company.name, created)
                 result["new_count"] = created
@@ -222,6 +224,7 @@ def _process_company(
                     )
             except Exception as exc:
                 result["outcome"] = "Failed"
+                result["airtable_error"] = True
                 result["note"] += "; Airtable write failed: {}".format(exc)
                 logger.error("%s: Airtable write failed: %s", company.name, exc)
     else:
@@ -246,4 +249,20 @@ def _log_run(config: Config, company: Company, result: dict, dry_run: bool) -> N
             note=result.get("note", ""),
         )
     except Exception as exc:
+        result["airtable_error"] = True
         logger.error("Could not write run log for %s: %s", company.name, exc)
+
+
+def exit_code(summary: dict) -> int:
+    """1 if the run should show as failed on GitHub Actions, else 0.
+
+    A run fails if it stopped early, if any Airtable write failed, or if every
+    source it actually tried to fetch failed. Skipped sources don't count,
+    otherwise a single skipped company would hide a total outage.
+    """
+    if summary.get("aborted") or summary.get("airtable_errors"):
+        return 1
+    attempted = [r for r in summary["results"] if r.get("outcome") != "Skipped"]
+    if attempted and all(r.get("outcome") == "Failed" for r in attempted):
+        return 1
+    return 0

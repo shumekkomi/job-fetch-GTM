@@ -5,9 +5,8 @@ our saved JSON files, so the tests are fast and don't depend on the internet.
 """
 import json
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-import pytest
 
 SAMPLES_DIR = os.path.join(os.path.dirname(__file__), "samples")
 

@@ -10,9 +10,8 @@ employmentType, createdAt. No salary field in the XML.
 """
 from __future__ import annotations
 
-import json
 import xml.etree.ElementTree as ET
-from typing import List, Optional
+from typing import List
 
 from ..http import get
 from ..models import CompanyResult, FetchError, Job

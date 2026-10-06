@@ -1,20 +1,19 @@
 # Fetch jobs from ATS APIs and write them to Airtable.
-#
-# Runs daily at 07:00 UK time (06:00 UTC in winter, but cron doesn't know about
-# BST, so we set 06:00 UTC which is 07:00 BST in summer and 06:00 GMT in winter).
-# Also has a manual "Run workflow" button in GitHub Actions.
+# Runs once a day, plus a manual "Run workflow" button on the Actions tab.
 
 name: Fetch Jobs
 
 on:
   schedule:
-    # 06:00 UTC = 07:00 BST (summer) / 06:00 GMT (winter).
-    # GitHub Actions cron uses UTC only. If you need exactly 07:00 UK
-    # year-round, you'd need two cron lines or a wrapper that checks the
-    # timezone. This is close enough.
+    # Cron here is UTC only: 06:00 UTC is 07:00 UK time in summer, 06:00 in
+    # winter. GitHub often starts scheduled runs hours late on busy days.
     - cron: "0 6 * * *"
   workflow_dispatch:
-    # Manual trigger: click "Run workflow" on the Actions tab.
+
+# The job only reads the code. Airtable access comes from the secret below,
+# not from GitHub's token, so GitHub's token gets no write access.
+permissions:
+  contents: read
 
 jobs:
   fetch:

@@ -4,9 +4,11 @@ This is the entry point for resume-based matching. The resume is never
 hardcoded — you point to a file (plain text or Markdown) via config.yaml
 or the --resume CLI flag, and the scorer reads it fresh on every run.
 
-Scoring is keyword-based: we extract meaningful terms from your resume,
-then count how many appear in each job description. The result is a
-0–100 score where 100 means every resume keyword appeared in the JD.
+Scoring is keyword-based: we extract meaningful terms from both the resume
+and the job description, then ask what share of the JD's terms the resume
+covers. The result is a 0-100 score where 100 means every meaningful term in
+the JD also appears in the resume. In practice scores land between about 15
+and 45, so treat them as a ranking, not a percentage fit.
 
 Why keyword matching and not embeddings: zero dependencies, runs offline,
 and for a job search the terms themselves (tools, titles, frameworks)
@@ -16,7 +18,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Set
 
 from .models import Job
 
@@ -34,11 +36,9 @@ _STOP_WORDS = {
     "there", "when", "where", "why", "we", "us", "our", "you", "your",
     "i", "me", "my", "he", "him", "his", "she", "her", "it", "its",
     "they", "them", "their", "also", "as", "up", "out", "over", "well",
-    "work", "working", "worked", "team", "role", "company", "experience",
-    "strong", "ability", "excellent", "good", "great", "new", "using",
+    "work", "working", "new", "using",
     "used", "use", "including", "across", "within", "ensure", "based",
-    "key", "high", "level", "part", "time", "year", "years", "day",
-    "etc", "per", "via",
+    "key", "high", "level", "part", "time", "etc", "per", "via",
     # Resume/CV filler — action verbs, structure words, generic terms.
     "managed", "handling", "handle", "handled", "ran", "run", "running",
     "built", "build", "building", "made", "making", "make", "worked",
@@ -49,24 +49,24 @@ _STOP_WORDS = {
     "way", "place", "people", "person", "end", "get", "take", "keep",
     "let", "say", "see", "know", "come", "going", "want", "tell",
     "show", "much", "even", "top", "best", "around", "since",
-    "long", "next", "last", "real", "live", "what", "done", "enough",
+    "long", "next", "last", "real", "live", "done", "enough",
     "actually", "directly", "currently", "alongside", "without", "below",
     "under", "present", "block", "entry", "variant", "fixed", "notes",
     "section", "instructions", "assembly", "pick", "start", "target",
     "matching", "tagged", "compact", "parked", "link", "links", "repo",
     "line", "page", "pages", "site", "input", "fill", "plain",
     "already", "often", "while", "later", "once", "early", "closer",
-    "rest", "felt", "gave", "tried", "left", "went", "pushed",
-    "applied", "applying", "moved", "moving", "turned", "turning",
+    "rest", "felt", "tried", "left", "went", "pushed",
+    "applied", "applying", "moved", "moving", "turning",
     "helped", "helping", "found", "finding", "learned", "learning",
     "tested", "testing", "tracked", "tracking", "changed", "changing",
     "identified", "reported", "reporting", "delivered", "delivering",
     "prepared", "preparing", "planned", "planning", "coordinated",
     "recommended", "encouraged", "explored", "exploring", "reviewed",
-    "reviewed", "reviewed", "diagnosed", "flagged", "resolved",
+    "diagnosed", "flagged", "resolved",
     "adjusted", "adjusting", "monitored", "monitoring", "achieved",
     "drove", "driving", "growing", "grown", "knew", "knowing",
-    "observed", "sitting", "stood", "sitting", "tried", "tried",
+    "observed", "sitting", "stood",
     # Generic job/resume terms.
     "role", "roles", "team", "teams", "company", "companies", "client",
     "clients", "project", "projects", "position", "positions",
@@ -177,10 +177,3 @@ def score_job(job: Job, resume_keywords: Set[str]) -> int:
 
     covered = jd_keywords & resume_keywords
     return round(len(covered) / len(jd_keywords) * 100)
-
-
-def score_jobs(jobs: List[Job], resume_path: str) -> List[int]:
-    """Score a list of jobs against a resume file. Returns parallel list of scores."""
-    text = load_resume(resume_path)
-    keywords = extract_keywords(text)
-    return [score_job(job, keywords) for job in jobs]

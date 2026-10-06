@@ -18,9 +18,11 @@
 default_location: "London"
 salary_floor_gbp: 35000
 
-# Point this at your resume (.txt or .md) to score jobs 0-100 by keyword match.
-# Or pass --resume on the CLI instead. Leave blank to skip scoring.
-resume_path: "/Users/your-username/Documents/your-cv.md"
+# Your CV (.txt or .md), used to score jobs 0-100 by keyword match.
+# private/ is git-ignored, so the CV never ends up in the repo. Put a copy or a
+# symlink there, or pass --resume on the CLI. If the file is missing (as on
+# GitHub Actions), scoring is skipped with a warning.
+resume_path: "private/cv.md"
 
 # Airtable identifiers (the token is in the AIRTABLE_TOKEN env var, never here).
 airtable:

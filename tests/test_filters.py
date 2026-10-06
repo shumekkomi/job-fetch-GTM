@@ -1,5 +1,4 @@
 """Tests for location, title, and salary filters."""
-import pytest
 
 from jobfetcher.config import Company, Config
 from jobfetcher.filters import filter_jobs, _matches_location, _match_title, _below_salary_floor

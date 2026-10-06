@@ -15,7 +15,6 @@ Lever paginates with skip= and limit=. We fetch everything (the API default is a
 """
 from __future__ import annotations
 
-import json
 from typing import List
 
 from ..http import get_json

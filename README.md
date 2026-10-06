@@ -4,7 +4,7 @@ A scheduled pipeline that pulls job listings straight from company ATS APIs, fil
 
 It runs once a day on GitHub Actions. It makes no LLM calls: the job text stored is exactly what the company published.
 
-**Status:** every scheduled run from 21 September to 5 October 2026 completed. Individual sources can still fail inside a run; those are recorded in the Run Log rather than stopping the job.
+**Status:** running daily since 21 September 2026. An audit on 6 October found two bugs that the green ticks on GitHub had hidden: the first week of runs wrote nothing, and later runs wrote the same jobs again every day. Both are fixed and covered by tests (see the last two failure modes below).
 
 ## Why it exists, and why there is no AI in the fetch layer
 
@@ -17,7 +17,7 @@ The first version was a Claude skill that fetched, cleaned and wrote records thr
 | Active sources | 26 (13 Greenhouse boards, 7 Ashby boards, 1 SmartRecruiters board, 5 LinkedIn title searches) |
 | Companies checked and logged as having no public ATS | 10 |
 | ATS adapters | Greenhouse, Ashby, Lever, SmartRecruiters, Personio, generic schema.org JSON-LD, LinkedIn guest search |
-| Tests | 62, run before every scheduled fetch |
+| Tests | 70, run before every scheduled fetch |
 
 ## How it works
 
@@ -34,10 +34,12 @@ These came from real runs, not from planning.
 - **Locations labelled by country instead of city.** Bloomreach lists UK roles as "United Kingdom", so a London filter silently dropped them. Config now supports per-company location aliases.
 - **Companies with no public ATS.** Ten watchlist companies (proprietary systems, Workday, Jobvite) cannot be polled. They stay in config with status `unsupported` and a dated note on what was checked, so they are not silently missing.
 - **Partial failures.** One source timing out or 404ing does not stop the run. It gets a Failed row in the Run Log and the rest carry on.
+- **Runs that pass while writing nothing.** For the first week the Airtable token was wrong, so every write got `403 Forbidden`. The script logged the errors and exited normally, so GitHub showed every run as passed. Now the run stops if it cannot read Airtable, and exits with an error if any write fails, which turns the run red and sends an email.
+- **A duplicate check that never matched.** Airtable returns record fields keyed by field name unless the request asks for field IDs. The code looked fields up by ID, so it always saw an empty table and saved every job again each day: 476 of 556 rows were duplicates by the time it was caught. The request now asks for IDs, a test fakes Airtable's behaviour to keep it that way, and the duplicates were removed.
 
 ## Known limitations
 
-- Resume scoring (a 0 to 100 keyword overlap between a job and my CV) only runs where the CV file exists. It is a local file, so scheduled runs on GitHub Actions log a warning and skip scoring.
+- Resume scoring (a 0 to 100 keyword overlap between a job and my CV) only runs where the CV file exists. The CV lives in a git-ignored `private/` folder, so scheduled runs on GitHub Actions log a warning and skip scoring. Scores land between about 15 and 45, so they work as a ranking rather than a percentage fit.
 - The LinkedIn adapter reads LinkedIn's public guest search pages. It is rate-limited and capped at three pages per query, and it will break if LinkedIn changes its markup.
 - Workable and Recruitee adapters are stubs: their public endpoints were not usable when this was built.
 - The schedule asks for 06:00 UTC, but GitHub delays scheduled runs on busy days. In practice they have started between about 10:30 and 13:00 UTC, so new postings land in Airtable around midday rather than first thing.
@@ -80,6 +82,8 @@ python run.py                   # real run
 ```
 
 The token needs `data.records:read` and `data.records:write` on the target base. On GitHub it is stored as the `AIRTABLE_TOKEN` Actions secret and never committed.
+
+To turn on resume scoring, put your CV (as `.md` or `.txt`) at `private/cv.md`, or pass `--resume path/to/cv.md`. The `private/` folder is git-ignored.
 
 ### Adding a company
 

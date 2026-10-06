@@ -11,7 +11,7 @@ start of a run, so we only make one API call for dedup (not one per job).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Set, Tuple
+from typing import List, Set
 
 from .models import Job
 

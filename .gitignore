@@ -3,4 +3,10 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .env
+.env.*
 .claude/
+.DS_Store
+*.log
+
+# Personal files such as your CV. Never committed.
+private/

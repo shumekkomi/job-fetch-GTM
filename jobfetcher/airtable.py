@@ -19,11 +19,11 @@ import json
 import os
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 import requests
 
-from .models import CompanyResult, Job
+from .models import Job
 
 AIRTABLE_API = "https://api.airtable.com/v0"
 MAX_RECORDS_PER_REQUEST = 10
@@ -102,6 +102,10 @@ def fetch_existing_jobs(base_id: str, table_id: str) -> Tuple[Set[str], Set[str]
             JOB_FIELDS["company"],
             JOB_FIELDS["title"],
         ],
+        # Airtable keys the returned fields by NAME unless told otherwise. We look
+        # them up by ID below, so without this every lookup misses and dedup sees
+        # an empty table.
+        "returnFieldsByFieldId": "true",
     }
 
     offset = None
@@ -145,7 +149,7 @@ def _truncate(text: str, max_len: int = MAX_FIELD_LENGTH, label: str = "") -> st
     return text[: max_len - len(suffix)] + suffix
 
 
-def _job_to_record(job: Job) -> Dict[str, Any]:
+def _job_to_record(job: Job, source: str = "Direct") -> Dict[str, Any]:
     """Convert a Job into an Airtable record payload using field IDs."""
     raw_json = json.dumps(job.raw, ensure_ascii=False, default=str)
 
@@ -153,7 +157,7 @@ def _job_to_record(job: Job) -> Dict[str, Any]:
         JOB_FIELDS["job_primary"]:  "{} — {}".format(job.company, job.title),
         JOB_FIELDS["title"]:       job.title,
         JOB_FIELDS["company"]:     job.company,
-        JOB_FIELDS["source"]:      "Direct",
+        JOB_FIELDS["source"]:      source,
         JOB_FIELDS["jd_text"]:     _truncate(job.description, label="JD text"),
         JOB_FIELDS["raw_blob"]:    _truncate(raw_json, label="raw JSON"),
         JOB_FIELDS["original_url"]: job.url,
@@ -168,20 +172,20 @@ def _job_to_record(job: Job) -> Dict[str, Any]:
         fields[JOB_FIELDS["posted_date"]] = job.posted_date
     if job.lane:
         fields[JOB_FIELDS["lane"]] = job.lane
-    if job.match_score is not None and JOB_FIELDS["match_score"]:
+    if job.match_score is not None:
         fields[JOB_FIELDS["match_score"]] = job.match_score
 
     return {"fields": fields}
 
 
-def insert_jobs(base_id: str, table_id: str, jobs: List[Job]) -> int:
+def insert_jobs(base_id: str, table_id: str, jobs: List[Job], source: str = "Direct") -> int:
     """Insert jobs into the Jobs table, 10 at a time. Returns the count actually created."""
     url = _table_url(base_id, table_id)
     created = 0
 
     for i in range(0, len(jobs), MAX_RECORDS_PER_REQUEST):
         batch = jobs[i : i + MAX_RECORDS_PER_REQUEST]
-        payload = {"records": [_job_to_record(j) for j in batch]}
+        payload = {"records": [_job_to_record(j, source) for j in batch]}
 
         response = requests.post(url, headers=_headers(), json=payload, timeout=30)
         response.raise_for_status()

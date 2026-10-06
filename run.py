@@ -5,6 +5,7 @@ Usage:
     python run.py                  # full run: fetch, filter, dedup, write to Airtable
     python run.py --dry-run        # fetch and filter, but don't write anything
     python run.py --config other.yaml   # use a different config file
+    python run.py --resume cv.md        # score jobs against a different CV
 
 The --dry-run flag is your safety net: run it first to see what would happen,
 then do a real run once you're happy with the output.
@@ -13,7 +14,7 @@ import argparse
 import sys
 
 from jobfetcher.config import load_config
-from jobfetcher.runner import run
+from jobfetcher.runner import exit_code, run
 
 
 def main() -> None:
@@ -43,10 +44,8 @@ def main() -> None:
 
     summary = run(config, dry_run=args.dry_run, resume_path=args.resume)
 
-    # Exit with code 1 if every company failed (something is probably wrong).
-    all_failed = all(r.get("outcome") in ("Failed",) for r in summary["results"])
-    if all_failed and summary["companies_processed"] > 0:
-        sys.exit(1)
+    # A non-zero exit turns the GitHub Actions run red, which sends an email.
+    sys.exit(exit_code(summary))
 
 
 if __name__ == "__main__":

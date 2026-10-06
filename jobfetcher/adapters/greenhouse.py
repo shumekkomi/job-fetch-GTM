@@ -9,7 +9,6 @@ We record `first_published` as the posted date and note that `updated_at` may di
 """
 from __future__ import annotations
 
-import json
 from typing import List
 
 from ..http import get_json
@@ -38,17 +37,9 @@ def fetch(slug: str, company: str) -> CompanyResult:
 
     jobs: List[Job] = []
     for entry in raw_jobs:
-        # `first_published` is when the post first appeared. `updated_at` changes on any edit.
+        # `first_published` is when the post first appeared. `updated_at` changes on
+        # any edit, so it would make old roles look new.
         first_pub = iso_to_date(entry.get("first_published"))
-        updated = iso_to_date(entry.get("updated_at"))
-
-        # Build a note if the two dates disagree (the listing was probably refreshed).
-        date_note = ""
-        if first_pub and updated and first_pub != updated:
-            date_note = (
-                "DATES DISAGREE: first_published says {} (recorded); "
-                "updated_at says {}."
-            ).format(first_pub, updated)
 
         jobs.append(Job(
             title=entry.get("title", ""),

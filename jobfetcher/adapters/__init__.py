@@ -6,9 +6,8 @@ a new ATS means: write the adapter file, then add one line here.
 """
 from __future__ import annotations
 
-from typing import Callable, Dict, List
+from typing import Callable, Dict
 
-from ..models import CompanyResult, Job
 
 # Each adapter is a function: (slug, company_name) -> CompanyResult
 # We import them lazily below and register them in ADAPTERS.
