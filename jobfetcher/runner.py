@@ -14,14 +14,15 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Optional, Set
+from typing import List, Optional, Set, Tuple
 
 from .adapters import ADAPTERS
 from .airtable import fetch_existing_jobs, insert_jobs, insert_run_log
+from .apply_lookup import ApplyUrlFinder
 from .config import Company, Config
 from .dedup import dedup
 from .filters import filter_jobs
-from .models import CompanyResult
+from .models import CompanyResult, Job
 from .resume import extract_keywords, load_resume, score_job
 
 logger = logging.getLogger("jobfetcher")
@@ -101,10 +102,11 @@ def run(config: Config, dry_run: bool = False, resume_path: Optional[str] = None
         ", ".join(c.name for c in skipped_companies) if skipped_companies else "none",
     )
 
+    apply_finder = ApplyUrlFinder()  # shared so each company's board is looked up once per run
     for company in active_companies:
         result = _process_company(
             company, config, existing_urls, existing_company_titles, dry_run,
-            resume_keywords,
+            resume_keywords, apply_finder,
         )
         summary["results"].append(result)
         summary["total_new_jobs"] += result.get("new_count", 0)
@@ -138,6 +140,7 @@ def _process_company(
     existing_company_titles: Set[str],
     dry_run: bool,
     resume_keywords: Optional[Set[str]] = None,
+    apply_finder: Optional[ApplyUrlFinder] = None,
 ) -> dict:
     """Fetch, filter, dedup, and write for one company. Never raises."""
     result = {"company": company.name, "outcome": "OK", "new_count": 0, "note": ""}
@@ -193,6 +196,22 @@ def _process_company(
             "; ".join(dedup_result.skipped_title),
         )
 
+    # -- LinkedIn jobs: look for the same role on the company's own board --
+    found_on_board = 0
+    already_saved: List[str] = []
+    if apply_finder and company.ats == "linkedin" and new_jobs:
+        new_jobs, already_saved = _attach_apply_urls(new_jobs, apply_finder, existing_urls)
+        found_on_board = sum(1 for j in new_jobs if j.apply_url)
+        logger.info(
+            "%s: found the company's own posting for %d of %d new jobs",
+            company.name, found_on_board + len(already_saved), len(new_jobs) + len(already_saved),
+        )
+        if already_saved:
+            logger.info(
+                "%s: %d already saved from the company's own board: %s",
+                company.name, len(already_saved), "; ".join(already_saved),
+            )
+
     # -- Score against resume --
     if resume_keywords and new_jobs:
         for job in new_jobs:
@@ -206,6 +225,10 @@ def _process_company(
         note_parts.append("dedup (URL): {} skipped".format(len(dedup_result.skipped_url)))
     if dedup_result.skipped_title:
         note_parts.append("dedup (title repost): {} skipped".format(len(dedup_result.skipped_title)))
+    if already_saved:
+        note_parts.append("dedup (company board): {} skipped".format(len(already_saved)))
+    if found_on_board:
+        note_parts.append("company posting found: {}".format(found_on_board))
     result["note"] = "; ".join(note_parts)
 
     # -- Write --
@@ -214,7 +237,8 @@ def _process_company(
             logger.info("%s: DRY RUN -- would insert %d jobs:", company.name, len(new_jobs))
             for j in new_jobs:
                 score_label = " score:{}".format(j.match_score) if j.match_score is not None else ""
-                logger.info("  [%s%s] %s -- %s (%s)", j.lane, score_label, j.company, j.title, j.location)
+                apply_label = " -> {}".format(j.apply_url) if j.apply_url else ""
+                logger.info("  [%s%s] %s -- %s (%s)%s", j.lane, score_label, j.company, j.title, j.location, apply_label)
         else:
             try:
                 created = insert_jobs(
@@ -228,6 +252,8 @@ def _process_company(
                 # insert the same job (unlikely, but possible across boards).
                 for j in new_jobs:
                     existing_urls.add(j.url.strip().lower())
+                    if j.apply_url:
+                        existing_urls.add(j.apply_url.strip().lower())
                     existing_company_titles.add(
                         "{}|{}".format(j.company.strip().lower(), j.title.strip().lower())
                     )
@@ -244,6 +270,26 @@ def _process_company(
 
     _log_run(config, company, result, dry_run)
     return result
+
+
+def _attach_apply_urls(
+    jobs: List[Job], finder: ApplyUrlFinder, existing_urls: Set[str],
+) -> Tuple[List[Job], List[str]]:
+    """Set apply_url where the company's board has the same role.
+
+    A job whose company posting is already in Airtable (saved earlier straight
+    from that board) is dropped as a duplicate and returned as a label instead.
+    """
+    kept: List[Job] = []
+    already_saved: List[str] = []
+    for job in jobs:
+        url = finder.find(job.company, job.title)
+        if url and url.strip().lower() in existing_urls:
+            already_saved.append("{} -- {}".format(job.company, job.title))
+            continue
+        job.apply_url = url
+        kept.append(job)
+    return kept, already_saved
 
 
 def _log_run(config: Config, company: Company, result: dict, dry_run: bool) -> None:

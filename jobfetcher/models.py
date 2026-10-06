@@ -36,6 +36,7 @@ class Job:
     raw: Dict[str, Any] = field(default_factory=dict)  # the untouched JSON for this one job
     lane: Optional[str] = None       # set later by the title filter
     match_score: Optional[int] = None  # 0–100 resume match, set by the scorer
+    apply_url: Optional[str] = None  # the company's own posting, when found for a LinkedIn job
 
     @property
     def fingerprint(self) -> str:
