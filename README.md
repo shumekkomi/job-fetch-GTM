@@ -1,165 +1,101 @@
 # Job Fetcher
 
-A Python script that fetches job listings from company career pages (via their ATS APIs), filters for relevant roles in London, deduplicates against your existing Airtable records, and writes new matches straight to your **Job Hunt** Airtable base.
+A scheduled pipeline that pulls job listings straight from company ATS APIs, filters them, deduplicates them against what is already tracked, and writes new matches to Airtable with the full job description captured at fetch time. It also writes a run log row for every source on every run, including the ones that fail.
 
-Runs daily at 07:00 UK time via GitHub Actions. No AI calls, no headless browser, no paraphrasing. The job descriptions you get are the exact text the company published.
+It runs once a day on GitHub Actions. It makes no LLM calls: the job text stored is exactly what the company published.
 
-## What it does
+**Status:** every scheduled run from 21 September to 5 October 2026 completed. Individual sources can still fail inside a run; those are recorded in the Run Log rather than stopping the job.
 
-1. **Fetches** jobs from each company on your watchlist, using the right adapter for their ATS (Greenhouse, Ashby, Lever, SmartRecruiters, Personio, or JSON-LD structured data).
-2. **Filters** by location (London, plus per-company overrides), title (three lanes: Growth, Performance, GTM Engineering), and salary floor (drops anything explicitly below 35k GBP).
-3. **Deduplicates** against existing Airtable records by URL and by company+title.
-4. **Writes** new jobs to the Jobs table and a run log entry for every company (including failures) to the Run Log table.
+## Why it exists, and why there is no AI in the fetch layer
+
+The first version was a Claude skill that fetched, cleaned and wrote records through Airtable's MCP server. It worked, but it was the wrong tool for the job. Fetching and filtering are the same steps every day, and an LLM doing them costs tokens on every record, can paraphrase a job description instead of storing it word for word, and cannot be covered by tests. So the fetching, filtering and deduplication moved into this Python script, which is deterministic, testable and free to run. Judgement work, like deciding whether a role is worth applying for, stays with me and with Claude outside this repo.
+
+## What it covers
+
+| | Count |
+|---|---|
+| Active sources | 26 (13 Greenhouse boards, 7 Ashby boards, 1 SmartRecruiters board, 5 LinkedIn title searches) |
+| Companies checked and logged as having no public ATS | 10 |
+| ATS adapters | Greenhouse, Ashby, Lever, SmartRecruiters, Personio, generic schema.org JSON-LD, LinkedIn guest search |
+| Tests | 62, run before every scheduled fetch |
+
+## How it works
+
+1. **Fetch.** Each company in `config.yaml` is fetched with the adapter for its ATS. LinkedIn entries are title searches rather than company boards, so they find employers that are not on the watchlist.
+2. **Filter.** Location (London by default, with per-company aliases), title (substring match into three lanes: Growth, Performance, GTM Engineering) and a salary floor that only drops roles explicitly paying below it.
+3. **Deduplicate.** Against existing Airtable records, first by URL, then by company plus title, so the same role found through two sources is only written once.
+4. **Write.** New jobs go to the Jobs table with the full description. Every source gets a Run Log row with its outcome (OK, Empty, Failed, Skipped) and a note.
+
+## Failure modes it handles
+
+These came from real runs, not from planning.
+
+- **A successful response with nothing in it.** Greenhouse returns HTTP 200 with an empty jobs array when a slug is wrong. Read naively, that looks like "this company has no open roles". The pipeline logs it as **Empty**, a probable slug failure, rather than as a genuine zero. HubSpot's board is currently in this state and is marked broken in config.
+- **Locations labelled by country instead of city.** Bloomreach lists UK roles as "United Kingdom", so a London filter silently dropped them. Config now supports per-company location aliases.
+- **Companies with no public ATS.** Ten watchlist companies (proprietary systems, Workday, Jobvite) cannot be polled. They stay in config with status `unsupported` and a dated note on what was checked, so they are not silently missing.
+- **Partial failures.** One source timing out or 404ing does not stop the run. It gets a Failed row in the Run Log and the rest carry on.
+
+## Known limitations
+
+- Resume scoring (a 0 to 100 keyword overlap between a job and my CV) only runs where the CV file exists. It is a local file, so scheduled runs on GitHub Actions log a warning and skip scoring.
+- The LinkedIn adapter reads LinkedIn's public guest search pages. It is rate-limited and capped at three pages per query, and it will break if LinkedIn changes its markup.
+- Workable and Recruitee adapters are stubs: their public endpoints were not usable when this was built.
+- The schedule asks for 06:00 UTC, but GitHub delays scheduled runs on busy days. In practice they have started between about 10:30 and 13:00 UTC, so new postings land in Airtable around midday rather than first thing.
 
 ## File structure
 
 ```
 run.py                          Entry point. --dry-run to test without writing.
-config.yaml                     Watchlist, title lanes, Airtable IDs. Edit this.
+config.yaml                     Watchlist, title lanes, Airtable IDs.
 requirements.txt                Python dependencies (requests, pyyaml, pytest).
 jobfetcher/
-    __init__.py
     config.py                   Loads and validates config.yaml.
     models.py                   Job and CompanyResult data shapes.
     text.py                     HTML-to-text conversion and date parsing.
     http.py                     HTTP requests with retries and error handling.
-    filters.py                  Location, title, and salary filters.
+    filters.py                  Location, title and salary filters.
     dedup.py                    Dedup against existing Airtable records.
+    resume.py                   Keyword-overlap scoring against a CV.
     airtable.py                 Reads from and writes to Airtable.
     runner.py                   Orchestrates the full pipeline.
-    adapters/
-        __init__.py             Registry of all ATS adapters.
-        greenhouse.py           Greenhouse API adapter.
-        ashby.py                Ashby API adapter.
-        lever.py                Lever API adapter.
-        smartrecruiters.py      SmartRecruiters API adapter (two-step fetch).
-        personio.py             Personio XML feed adapter.
-        workable.py             Stub: public API not working as of Sep 2026.
-        recruitee.py            Stub: public API not working as of Sep 2026.
-        jsonld.py               Generic JSON-LD schema.org/JobPosting adapter.
+    adapters/                   One module per ATS (see table above).
 tests/
-    samples/                    Saved API responses for offline testing.
-    test_adapters.py            Adapter tests (mocked HTTP).
-    test_filters.py             Filter logic tests.
-    test_dedup.py               Dedup logic tests.
-    test_text.py                HTML-to-text and date parsing tests.
+    samples/                    Saved API responses for offline tests.
+    test_*.py                   Adapter, filter, dedup, text and scoring tests.
 .github/workflows/
-    fetch-jobs.yaml             GitHub Actions: daily run + manual trigger.
+    fetch-jobs.yaml             Daily run plus a manual trigger.
 ```
 
-## How to add a company
-
-1. Find its ATS. Go to the company's careers page, click "Apply" on any job, and look at where the URL points:
-   - `boards.greenhouse.io` or `job-boards.greenhouse.io` = Greenhouse
-   - `jobs.ashbyhq.com` = Ashby
-   - `jobs.lever.co` = Lever
-   - `jobs.smartrecruiters.com` = SmartRecruiters
-   - `*.jobs.personio.de` = Personio
-
-2. Find its slug. That's the bit after the ATS domain. For example, `https://boards.greenhouse.io/braze/jobs/123` has slug `braze`.
-
-3. Test it. Run this in your terminal (replace the ATS and slug):
-   ```
-   curl "https://boards-api.greenhouse.io/v1/boards/YOUR_SLUG/jobs" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('jobs',[])),'jobs')"
-   ```
-   If you get a number > 0, it works.
-
-4. Add it to `config.yaml` under `companies`:
-   ```yaml
-   - name: "Company Name"
-     ats: greenhouse       # or ashby, lever, smartrecruiters, personio, jsonld
-     slug: "the-slug"
-     careers_url: "https://company.com/careers"
-     tier: 2
-     status: active
-   ```
-
-5. Run a dry run to check: `python run.py --dry-run`
-
-## How to add a job title
-
-Add it to the right lane in `config.yaml` under `title_lanes`:
-
-```yaml
-title_lanes:
-  Growth:
-    - "Growth Marketing Manager"
-    - "Your New Title Here"    # add it here
-```
-
-Titles are case-insensitive substring matches, so "Growth Marketing Manager" will also catch "Senior Growth Marketing Manager" and "Growth Marketing Manager, EMEA".
-
-## How to read a failed run's log
-
-1. Go to your GitHub repo, click the **Actions** tab.
-2. Click on the failed run (it will have a red cross).
-3. Click on the **fetch** job, then **Fetch jobs** step.
-4. The log shows exactly what happened for each company. Look for lines starting with `WARNING` or `ERROR`.
-5. Also check the **Run Log** table in Airtable. Every company gets an entry, even failures, with the error message in the Notes field.
-
-Common problems:
-- **"Empty"** outcome: the API returned 200 but no jobs. The slug is probably wrong, or the company moved ATS. Check their careers page again.
-- **"Failed"** with HTTP 404: wrong slug or the board was removed.
-- **"Failed"** with timeout: the API was slow. It will retry on the next run.
-- **Airtable write failed**: check that your `AIRTABLE_TOKEN` secret is set and hasn't expired.
-
-## Setup (do this yourself)
-
-### 1. Create the GitHub repo
-
-```bash
-cd job-fetcher
-git init
-git add .
-git commit -m "Initial commit: job fetcher pipeline"
-```
-
-Then create a repo on GitHub (private is fine) and push to it.
-
-### 2. Set the Airtable token as a GitHub secret
-
-1. Go to [airtable.com/create/tokens](https://airtable.com/create/tokens) and create a personal access token with these scopes:
-   - `data.records:read` (for dedup)
-   - `data.records:write` (for inserting jobs and run logs)
-   - Access to the **Job Hunt** base.
-2. In your GitHub repo, go to **Settings > Secrets and variables > Actions**.
-3. Click **New repository secret**.
-4. Name: `AIRTABLE_TOKEN`, Value: paste your token.
-
-### 3. First run
-
-Do a dry run first to see what would happen:
-
-```bash
-pip install -r requirements.txt
-python run.py --dry-run
-```
-
-Then do a real run:
-
-```bash
-export AIRTABLE_TOKEN="your_token_here"
-python run.py
-```
-
-### 4. Enable the schedule
-
-Push to GitHub. The daily run will start automatically. You can also trigger it manually from the Actions tab with the "Run workflow" button.
-
-## Running locally
+## Running it yourself
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# Run tests
-python -m pytest tests/ -v
-
-# Dry run (no Airtable writes)
-python run.py --dry-run
-
-# Real run (needs AIRTABLE_TOKEN)
-export AIRTABLE_TOKEN="pat..."
-python run.py
+python -m pytest tests/ -v      # tests
+python run.py --dry-run         # fetch and filter, no Airtable writes
+export AIRTABLE_TOKEN="pat..."  # Airtable personal access token
+python run.py                   # real run
 ```
+
+The token needs `data.records:read` and `data.records:write` on the target base. On GitHub it is stored as the `AIRTABLE_TOKEN` Actions secret and never committed.
+
+### Adding a company
+
+1. Click "Apply" on any of its jobs and check where the link goes: `job-boards.greenhouse.io` (Greenhouse), `jobs.ashbyhq.com` (Ashby), `jobs.lever.co` (Lever), `jobs.smartrecruiters.com` (SmartRecruiters), `*.jobs.personio.de` (Personio).
+2. The slug is the part after the domain, e.g. `braze` in `boards.greenhouse.io/braze/jobs/123`.
+3. Check the board returns jobs:
+   ```
+   curl "https://boards-api.greenhouse.io/v1/boards/YOUR_SLUG/jobs" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('jobs',[])),'jobs')"
+   ```
+   Zero on a company that is visibly hiring means the slug is wrong.
+4. Add it under `companies` in `config.yaml` and run `python run.py --dry-run`.
+
+### Adding a title
+
+Add it to a lane under `title_lanes` in `config.yaml`. Matching is case-insensitive substring, so "Growth Marketing Manager" also catches "Senior Growth Marketing Manager, EMEA".
+
+### Reading a failed run
+
+Check the Actions tab for the run's log (look for `WARNING` and `ERROR` lines), then the Run Log table in Airtable, where every source has a row and failures carry the error in Notes. An **Empty** outcome usually means a wrong slug or a company that changed ATS.
