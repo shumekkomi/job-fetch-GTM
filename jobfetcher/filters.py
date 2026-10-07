@@ -6,6 +6,7 @@ counts in every run log).
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -53,6 +54,33 @@ def _matches_location(job: Job, company: Company, config: Config) -> bool:
     return False
 
 
+# Regions that mean "not the UK" when a remote role names them. Whole words
+# only, so "us" doesn't match inside "Belarus" or "business".
+_ELSEWHERE = re.compile(
+    r"\b(us|usa|u\.s\.|united states|namer|north america|americas|canada|"
+    r"latam|apac|asia|australia|india)\b"
+)
+
+REMOTE_ELSEWHERE = " (Remote, listed for another region: check UK eligibility)"
+REMOTE_UNCONFIRMED = " (Remote, UK eligibility unconfirmed)"
+
+
+def _is_remote(job: Job) -> bool:
+    """True if the location says remote or the ATS data flags the role as remote.
+
+    Some boards never put "remote" in the location text: Zapier's Ashby posts
+    say "NAMER" with isRemote set, and LinkedIn's JSON-LD uses TELECOMMUTE.
+    """
+    if "remote" in job.location.lower():
+        return True
+    raw = job.raw or {}
+    if raw.get("isRemote") is True:
+        return True
+    if str(raw.get("workplaceType", "")).lower() == "remote":
+        return True
+    return str(raw.get("jobLocationType", "")).upper() == "TELECOMMUTE"
+
+
 def _match_title(job: Job, title_lanes: Dict[str, List[str]]) -> Optional[str]:
     """Check if the job title matches any lane. Returns the lane name, or None.
 
@@ -96,6 +124,14 @@ def filter_jobs(
     location_passed = []
     for job in jobs:
         if _matches_location(job, company, config):
+            location_passed.append(job)
+        elif config.include_remote and _is_remote(job):
+            # Keep every remote role, but say in the location whether it's
+            # listed for somewhere else, so those can be checked or filtered.
+            if _ELSEWHERE.search(job.location.lower()):
+                job.location += REMOTE_ELSEWHERE
+            else:
+                job.location += REMOTE_UNCONFIRMED
             location_passed.append(job)
         elif company.keep_unqualified_remote:
             loc_lower = job.location.lower()

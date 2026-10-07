@@ -16,7 +16,16 @@
 # -------------------------------------------------------------------
 
 default_location: "London"
-salary_floor_gbp: 35000
+
+# Drop roles that state a GBP salary below this. Roles with no salary, or a
+# salary in another currency, are kept.
+salary_floor_gbp: 30000
+
+# Keep remote roles from any region, not only London ones. Each is labelled in
+# Location: "(Remote, UK eligibility unconfirmed)" when no region is named, or
+# "(Remote, listed for another region: check UK eligibility)" when it names
+# the US, Canada, APAC and so on. Filter on that text in Airtable.
+include_remote: true
 
 # Your CV (.txt or .md), used to score jobs 0-100 by keyword match.
 # private/ is git-ignored, so the CV never ends up in the repo. Put a copy or a

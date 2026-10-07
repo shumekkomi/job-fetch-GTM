@@ -215,3 +215,52 @@ class TestRealTitleLanes:
         for title in ["Account Executive", "Customer Success Manager",
                       "Revenue Operations Analyst"]:
             assert self._lane(title) is None, title
+
+
+class TestIncludeRemote:
+    """include_remote keeps remote roles from any region, labelled so the
+    ones listed for another region can be checked or filtered out."""
+
+    def _run(self, job, include_remote=True, company=None):
+        config = _make_config(include_remote=include_remote)
+        passed, _ = filter_jobs([job], company or _make_company(), config)
+        return passed
+
+    def test_remote_flag_in_raw_data_counts(self):
+        # Zapier's Ashby posts say "NAMER" with isRemote true, never "remote".
+        job = _make_job(location="NAMER", raw={"isRemote": True})
+        passed = self._run(job)
+        assert len(passed) == 1
+        assert passed[0].location == "NAMER (Remote, listed for another region: check UK eligibility)"
+
+    def test_workplace_type_remote_counts(self):
+        job = _make_job(location="Toronto", raw={"workplaceType": "Remote"})
+        assert len(self._run(job)) == 1
+
+    def test_linkedin_telecommute_counts(self):
+        job = _make_job(location="Anywhere", raw={"jobLocationType": "TELECOMMUTE"})
+        passed = self._run(job)
+        assert passed[0].location == "Anywhere (Remote, UK eligibility unconfirmed)"
+
+    def test_plain_remote_is_unconfirmed(self):
+        passed = self._run(_make_job(location="Remote"))
+        assert passed[0].location == "Remote (Remote, UK eligibility unconfirmed)"
+
+    def test_us_remote_is_labelled_another_region(self):
+        passed = self._run(_make_job(location="Remote - United States"))
+        assert "listed for another region" in passed[0].location
+
+    def test_region_words_need_whole_word_match(self):
+        # "us" inside another word must not count as the US.
+        passed = self._run(_make_job(location="Remote, Belarus"))
+        assert "UK eligibility unconfirmed" in passed[0].location
+
+    def test_off_by_default(self):
+        assert self._run(_make_job(location="Remote"), include_remote=False) == []
+
+    def test_office_role_elsewhere_still_dropped(self):
+        assert self._run(_make_job(location="New York")) == []
+
+    def test_uk_match_is_not_relabelled(self):
+        passed = self._run(_make_job(location="London (Remote)"))
+        assert passed[0].location == "London (Remote)"

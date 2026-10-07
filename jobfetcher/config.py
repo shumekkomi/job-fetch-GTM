@@ -40,6 +40,7 @@ class Config:
     title_lanes: Dict[str, List[str]]    # lane name -> list of title substrings
     default_location: str = "London"     # the default location to filter for
     salary_floor_gbp: float = 35000.0    # drop jobs with salary explicitly below this
+    include_remote: bool = False         # keep remote roles from any region, labelled
     airtable_base_id: str = ""
     airtable_jobs_table_id: str = ""
     airtable_runlog_table_id: str = ""
@@ -84,6 +85,7 @@ def load_config(path: str = "config.yaml") -> Config:
         title_lanes=title_lanes,
         default_location=raw.get("default_location", "London"),
         salary_floor_gbp=float(raw.get("salary_floor_gbp", 35000)),
+        include_remote=bool(raw.get("include_remote", False)),
         # From the environment so the public repo doesn't reveal which base to target.
         airtable_base_id=os.environ.get("AIRTABLE_BASE_ID", ""),
         airtable_jobs_table_id=os.environ.get("AIRTABLE_JOBS_TABLE_ID", ""),
