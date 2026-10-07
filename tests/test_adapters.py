@@ -105,6 +105,28 @@ class TestAshby:
         assert job.salary_text is None
         assert job.salary_min is None
 
+    def test_secondary_locations_are_included(self):
+        # Zapier lists roles under a primary region with others as secondary
+        # locations (e.g. "NAMER" plus "EMEA"). Ignoring the secondary ones
+        # dropped roles that are open to the UK.
+        from jobfetcher.adapters.ashby import fetch
+        data = {"jobs": [{
+            "title": "Marketing Operations Manager",
+            "jobUrl": "https://jobs.ashbyhq.com/testco/1",
+            "location": "NAMER",
+            "secondaryLocations": [{"location": "EMEA"}, {"location": "NAMER"}],
+        }]}
+        with _mock_adapter_json(self.MODULE, data):
+            result = fetch("testco", "TestCo")
+        assert result.jobs[0].location == "NAMER; EMEA"
+
+    def test_location_without_secondaries_is_unchanged(self):
+        from jobfetcher.adapters.ashby import fetch
+        data = _load_sample("ashby.json")
+        with _mock_adapter_json(self.MODULE, data):
+            result = fetch("testco", "TestCo")
+        assert result.jobs[0].location == "London UK"
+
 
 # ---- Lever ----
 

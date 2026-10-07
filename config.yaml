@@ -290,6 +290,23 @@ companies:
     tier: 3
     status: active
 
+  - name: "Zapier"
+    ats: ashby
+    slug: "zapier"
+    careers_url: "https://zapier.com/jobs"
+    tier: 2
+    status: active
+    # 7 Oct 2026: fully remote. Roles are filed by region code ("NAMER",
+    # "APAC", "HQ"), never by city, so match regions that include the UK.
+    # Not "UK" on its own: substring matching would also hit "Ukraine".
+    location_aliases:
+      - "EMEA"
+      - "Europe"
+      - "United Kingdom"
+      - "Global"
+      - "Worldwide"
+      - "Anywhere"
+
   - name: "GoCardless"
     ats: greenhouse
     slug: "gocardless"

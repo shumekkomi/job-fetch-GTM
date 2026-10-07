@@ -20,6 +20,22 @@ from ..text import html_to_text, iso_to_date
 BASE_URL = "https://api.ashbyhq.com/posting-api/job-board/{slug}"
 
 
+def _all_locations(entry: dict) -> str:
+    """Primary location plus any secondary ones, joined with "; ".
+
+    Some boards (Zapier, for example) file a role under one region and list
+    the others as secondary locations, so filtering on the primary alone
+    misses roles that are open to the UK.
+    """
+    names = []
+    for loc in [entry.get("location", "")] + [
+        s.get("location", "") for s in entry.get("secondaryLocations") or []
+    ]:
+        if loc and loc not in names:
+            names.append(loc)
+    return "; ".join(names)
+
+
 def _parse_compensation(comp: Optional[dict]) -> dict:
     """Pull the salary headline and min/max out of Ashby's compensation structure.
 
@@ -76,7 +92,7 @@ def fetch(slug: str, company: str) -> CompanyResult:
             title=entry.get("title", ""),
             company=company,
             url=entry.get("jobUrl", ""),
-            location=entry.get("location", ""),
+            location=_all_locations(entry),
             description=plain,
             posted_date=iso_to_date(entry.get("publishedAt")),
             posted_date_kind="publishedAt" if entry.get("publishedAt") else "",

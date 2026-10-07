@@ -14,10 +14,10 @@ The first version was a Claude skill that fetched, cleaned and wrote records thr
 
 | | Count |
 |---|---|
-| Active sources | 26 (13 Greenhouse boards, 7 Ashby boards, 1 SmartRecruiters board, 5 LinkedIn title searches) |
+| Active sources | 27 (13 Greenhouse boards, 8 Ashby boards, 1 SmartRecruiters board, 5 LinkedIn title searches) |
 | Companies checked and logged as having no public ATS | 10 |
 | ATS adapters | Greenhouse, Ashby, Lever, SmartRecruiters, Personio, generic schema.org JSON-LD, LinkedIn guest search |
-| Tests | 92, run before every scheduled fetch |
+| Tests | 94, run before every scheduled fetch |
 
 ## How it works
 
