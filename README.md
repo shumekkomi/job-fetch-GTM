@@ -14,15 +14,15 @@ The first version was a Claude skill that fetched, cleaned and wrote records thr
 
 | | Count |
 |---|---|
-| Active sources | 27 (13 Greenhouse boards, 8 Ashby boards, 1 SmartRecruiters board, 5 LinkedIn title searches) |
+| Active sources | 31 (13 Greenhouse boards, 8 Ashby boards, 1 SmartRecruiters board, 9 LinkedIn title searches) |
 | Companies checked and logged as having no public ATS | 10 |
 | ATS adapters | Greenhouse, Ashby, Lever, SmartRecruiters, Personio, generic schema.org JSON-LD, LinkedIn guest search |
-| Tests | 94, run before every scheduled fetch |
+| Tests | 98, run before every scheduled fetch |
 
 ## How it works
 
 1. **Fetch.** Each company in `config.yaml` is fetched with the adapter for its ATS. LinkedIn entries are title searches rather than company boards, so they find employers that are not on the watchlist.
-2. **Filter.** Location (London by default, with per-company aliases), title (substring match into three lanes: Growth, Performance, GTM Engineering) and a salary floor that only drops roles explicitly paying below it.
+2. **Filter.** Location (London by default, with per-company aliases), title (substring match into five lanes: CRM & Lifecycle, RevOps, Growth, Performance, GTM Engineering) and a salary floor that only drops roles explicitly paying below it.
 3. **Deduplicate.** Against existing Airtable records, first by URL, then by company plus title, so the same role found through two sources is only written once.
 4. **Find the original posting (LinkedIn jobs only).** LinkedIn hides where "Apply" leads from logged-out visitors, so for each new LinkedIn job the pipeline guesses the company's board name and looks on Greenhouse, Ashby, Lever and SmartRecruiters. If a posting with exactly the same title is there, its link goes in **Apply URL**. If that posting was already saved straight from the company's board, the LinkedIn copy is skipped as a duplicate.
 5. **Write.** New jobs go to the Jobs table with the full description. Every source gets a Run Log row with its outcome (OK, Empty, Failed, Skipped) and a note.

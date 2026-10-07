@@ -36,6 +36,40 @@ resume_path: "private/cv.md"
 # these strings gets tagged with that lane. Order matters: first match wins.
 # -------------------------------------------------------------------
 title_lanes:
+  # Primary target from Oct 2026: Executive / Specialist level in CRM,
+  # lifecycle, retention, email and marketing ops. Listed first so these
+  # win over the broader lanes below.
+  CRM & Lifecycle:
+    - "CRM Executive"
+    - "CRM Specialist"
+    - "CRM Marketing Executive"
+    - "CRM Marketing Specialist"
+    - "CRM Manager"
+    - "Lifecycle Marketing Executive"
+    - "Lifecycle Marketing Specialist"
+    - "Lifecycle Executive"
+    - "Lifecycle Specialist"
+    - "Retention Marketing Executive"
+    - "Retention Executive"
+    - "Email Marketing Executive"
+    - "Email Marketing Specialist"
+    - "Marketing Automation Executive"
+    - "Marketing Automation Specialist"
+    - "Loyalty Executive"
+    - "Growth Marketing Executive"
+    - "Growth Marketing Specialist"
+    - "Digital Marketing Executive"
+    - "Marketing Operations Executive"
+    - "Marketing Operations Specialist"
+  # Associate-level RevOps (e.g. Ben). Analyst roles are left out on
+  # purpose: they tend to be SQL-heavy.
+  RevOps:
+    - "Revenue Operations Associate"
+    - "Revenue Operations Specialist"
+    - "Revenue Operations Executive"
+    - "Revenue Operations Coordinator"
+    - "RevOps Associate"
+    - "RevOps Specialist"
   Growth:
     - "Growth Marketing Manager"
     - "Digital Marketing Manager"
@@ -382,4 +416,35 @@ companies:
     slug: "RevOps Engineer"
     careers_url: ""
     tier: 2
+    status: active
+
+  # Added 7 Oct 2026 for the CRM / lifecycle / RevOps Associate targets.
+  # The company watchlist above is mostly B2B martech vendors, so most of
+  # these titles will only turn up through search.
+  - name: "LinkedIn: CRM Executive"
+    ats: linkedin
+    slug: "CRM Executive"
+    careers_url: ""
+    tier: 1
+    status: active
+
+  - name: "LinkedIn: CRM Specialist"
+    ats: linkedin
+    slug: "CRM Specialist"
+    careers_url: ""
+    tier: 1
+    status: active
+
+  - name: "LinkedIn: Lifecycle Marketing"
+    ats: linkedin
+    slug: "Lifecycle Marketing"
+    careers_url: ""
+    tier: 1
+    status: active
+
+  - name: "LinkedIn: Revenue Operations Associate"
+    ats: linkedin
+    slug: "Revenue Operations Associate"
+    careers_url: ""
+    tier: 1
     status: active

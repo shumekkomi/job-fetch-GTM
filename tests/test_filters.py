@@ -180,3 +180,38 @@ class TestFilterPipeline:
         # "Remote" should be kept, "Remote - US only" should be dropped.
         assert len(passed) == 1
         assert "UK eligibility unconfirmed" in passed[0].location
+
+
+class TestRealTitleLanes:
+    """Check the lanes in config.yaml itself, so an edit there can't quietly
+    stop matching the titles the search is actually aimed at."""
+
+    def _lane(self, title):
+        from jobfetcher.config import load_config
+        cfg = load_config("config.yaml")
+        return _match_title(_make_job(title=title), cfg.title_lanes)
+
+    def test_crm_and_lifecycle_titles(self):
+        for title in [
+            "CRM Executive", "Senior CRM Specialist", "Technical CRM Specialist",
+            "Lifecycle Marketing Executive", "Retention Marketing Executive",
+            "Email Marketing Specialist", "Marketing Automation Executive",
+            "Loyalty Executive", "Growth Marketing Specialist",
+            "Senior Digital Marketing Executive", "Marketing Operations Specialist",
+        ]:
+            assert self._lane(title) == "CRM & Lifecycle", title
+
+    def test_revops_titles(self):
+        for title in ["Revenue Operations Associate", "RevOps Associate",
+                      "Revenue Operations Specialist"]:
+            assert self._lane(title) == "RevOps", title
+
+    def test_existing_lanes_unchanged(self):
+        assert self._lane("Performance Marketing Manager") == "Performance"
+        assert self._lane("GTM Engineer") == "GTM Engineering"
+        assert self._lane("Growth Marketing Manager") == "Growth"
+
+    def test_unrelated_titles_do_not_match(self):
+        for title in ["Account Executive", "Customer Success Manager",
+                      "Revenue Operations Analyst"]:
+            assert self._lane(title) is None, title
