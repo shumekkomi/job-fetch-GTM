@@ -18,7 +18,7 @@ import json
 import re
 import time
 from html.parser import HTMLParser
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
 from ..http import get
@@ -28,7 +28,7 @@ from ..text import html_to_text, iso_to_date
 SEARCH_URL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
 RESULTS_PER_PAGE = 10
 MAX_PAGES = 3
-REQUEST_DELAY = 1.0  # be polite to LinkedIn
+REQUEST_DELAY = 2.0  # be polite to LinkedIn; at 1s, nine searches a day started getting HTTP 429
 
 
 def _is_linkedin_url(url: str) -> bool:
@@ -146,11 +146,19 @@ def _location_from_jsonld(loc: Any) -> str:
 # Public fetch function
 # ---------------------------------------------------------------------------
 
-def fetch(slug: str, company: str) -> CompanyResult:
+def fetch(
+    slug: str,
+    company: str,
+    skip_card: Optional[Callable[[Dict[str, str]], bool]] = None,
+) -> CompanyResult:
     """Search LinkedIn for jobs matching `slug` (a keyword) in London.
 
     `company` here is a label for the search query, not a single company.
     Each result may come from a different employer.
+
+    `skip_card` lets the caller drop search results before their detail page is
+    fetched (e.g. a title no lane matches, or a URL already saved). Most results
+    on a daily run are one or the other, so this cuts requests to LinkedIn sharply.
     """
     query = slug  # for linkedin, the slug IS the search keyword
     location = "London"
@@ -176,9 +184,13 @@ def fetch(slug: str, company: str) -> CompanyResult:
 
     # Fetch full JD for each card.
     jobs: List[Job] = []
+    skipped = 0
     for card in all_cards:
         url = card.get("url", "")
         if not _is_linkedin_url(url):
+            continue
+        if skip_card and skip_card(card):
+            skipped += 1
             continue
 
         detail = _fetch_job_detail(url)
@@ -213,4 +225,5 @@ def fetch(slug: str, company: str) -> CompanyResult:
             raw=detail or card,
         ))
 
-    return CompanyResult(company=company, ats="linkedin", outcome="OK", jobs=jobs)
+    note = "{} skipped before detail fetch".format(skipped) if skipped else ""
+    return CompanyResult(company=company, ats="linkedin", outcome="OK", jobs=jobs, note=note)

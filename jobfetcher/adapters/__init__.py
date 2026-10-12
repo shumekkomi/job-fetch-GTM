@@ -20,6 +20,7 @@ from .recruitee import fetch as recruitee_fetch
 from .personio import fetch as personio_fetch
 from .jsonld import fetch as jsonld_fetch
 from .linkedin import fetch as linkedin_fetch
+from .teamtailor import fetch as teamtailor_fetch
 
 # Maps config "ats" value -> the function that fetches from that ATS.
 ADAPTERS: Dict[str, Callable] = {
@@ -32,4 +33,5 @@ ADAPTERS: Dict[str, Callable] = {
     "personio": personio_fetch,
     "jsonld": jsonld_fetch,
     "linkedin": linkedin_fetch,
+    "teamtailor": teamtailor_fetch,
 }

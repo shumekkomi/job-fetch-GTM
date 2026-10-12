@@ -24,3 +24,22 @@ def test_follows_real_linkedin_links(url):
 ])
 def test_refuses_everything_else(url):
     assert not _is_linkedin_url(url)
+
+
+def test_skip_card_avoids_fetching_detail_pages():
+    # Cards the runner already knows it will drop (wrong title, already saved)
+    # should not cost a detail-page request.
+    from unittest.mock import patch
+    from jobfetcher.adapters import linkedin
+
+    cards = [
+        {"title": "CRM Executive", "company": "A", "url": "https://uk.linkedin.com/jobs/view/1", "location": "London"},
+        {"title": "Account Executive", "company": "B", "url": "https://uk.linkedin.com/jobs/view/2", "location": "London"},
+    ]
+    with patch.object(linkedin, "_search_page", return_value=cards), \
+         patch.object(linkedin, "_fetch_job_detail", return_value=None) as detail, \
+         patch.object(linkedin.time, "sleep"):
+        result = linkedin.fetch("CRM", "LinkedIn: CRM", skip_card=lambda c: c["title"] == "Account Executive")
+    assert detail.call_count == 1
+    assert [j.title for j in result.jobs] == ["CRM Executive"]
+    assert "1 skipped before detail fetch" in result.note

@@ -79,3 +79,14 @@ class TestExitCode:
 
     def test_any_airtable_error_fails_the_run(self):
         assert exit_code(self._summary(["OK"], airtable_errors=1)) == 1
+
+
+def test_linkedin_skip_card_drops_unmatched_titles_and_saved_jobs():
+    from jobfetcher.config import Config
+    from jobfetcher.runner import _linkedin_skip_card
+    cfg = Config(companies=[], title_lanes={"CRM & Lifecycle": ["CRM Executive"]})
+    skip = _linkedin_skip_card(cfg, {"https://uk.linkedin.com/jobs/view/9"}, {"acme|crm executive"})
+    assert skip({"title": "Account Executive", "url": "https://uk.linkedin.com/jobs/view/1", "company": "X"})
+    assert skip({"title": "CRM Executive", "url": "https://uk.linkedin.com/jobs/view/9?trk=abc", "company": "X"})
+    assert skip({"title": "CRM Executive", "url": "https://uk.linkedin.com/jobs/view/2", "company": "Acme"})
+    assert not skip({"title": "Senior CRM Executive", "url": "https://uk.linkedin.com/jobs/view/3", "company": "New Co"})

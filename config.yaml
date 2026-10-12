@@ -54,6 +54,7 @@ title_lanes:
     - "CRM Marketing Executive"
     - "CRM Marketing Specialist"
     - "CRM Manager"
+    - "CRM Strategist"
     - "Lifecycle Marketing Executive"
     - "Lifecycle Marketing Specialist"
     - "Lifecycle Executive"
@@ -80,6 +81,7 @@ title_lanes:
     - "RevOps Associate"
     - "RevOps Specialist"
   Growth:
+    - "Growth Marketer"
     - "Growth Marketing Manager"
     - "Digital Marketing Manager"
     - "E-commerce Marketing Manager"
@@ -111,8 +113,9 @@ title_lanes:
 # Fields:
 #   name:           display name (used in Airtable and logs)
 #   ats:            adapter to use (greenhouse, ashby, lever, smartrecruiters,
-#                   personio, jsonld, workable, recruitee)
-#   slug:           board identifier for the ATS API (for jsonld: the full URL)
+#                   personio, jsonld, workable, recruitee, teamtailor)
+#   slug:           board identifier for the ATS API (for jsonld: the full URL;
+#                   for teamtailor: the subdomain, or the full careers URL on a custom domain)
 #   careers_url:    the public careers page (for reference only)
 #   tier:           priority (1 = most important, 2 = secondary, 3 = nice to have)
 #   status:         active / paused / broken / unsupported
@@ -349,6 +352,24 @@ companies:
       - "Global"
       - "Worldwide"
       - "Anywhere"
+
+  - name: "Chip"
+    ats: teamtailor
+    slug: "chip"
+    careers_url: "https://chip.teamtailor.com/jobs"
+    tier: 2
+    status: active
+    # 12 Oct 2026: added after the CRM Strategist role was missed. Fintech,
+    # Shoreditch. Teamtailor RSS feed.
+
+  - name: "sunday"
+    ats: teamtailor
+    slug: "sunday"
+    careers_url: "https://sunday.teamtailor.com/jobs"
+    tier: 2
+    status: active
+    # 12 Oct 2026: their GTM Engineer role was missed in Oct because Teamtailor
+    # wasn't supported. Mostly Paris roles; the London filter handles that.
 
   - name: "GoCardless"
     ats: greenhouse

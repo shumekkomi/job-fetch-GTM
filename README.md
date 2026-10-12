@@ -14,10 +14,10 @@ The first version was a Claude skill that fetched, cleaned and wrote records thr
 
 | | Count |
 |---|---|
-| Active sources | 31 (13 Greenhouse boards, 8 Ashby boards, 1 SmartRecruiters board, 9 LinkedIn title searches) |
+| Active sources | 33 (13 Greenhouse boards, 8 Ashby boards, 2 Teamtailor sites, 1 SmartRecruiters board, 9 LinkedIn title searches) |
 | Companies checked and logged as having no public ATS | 10 |
-| ATS adapters | Greenhouse, Ashby, Lever, SmartRecruiters, Personio, generic schema.org JSON-LD, LinkedIn guest search |
-| Tests | 107, run before every scheduled fetch |
+| ATS adapters | Greenhouse, Ashby, Lever, SmartRecruiters, Personio, Teamtailor (RSS), generic schema.org JSON-LD, LinkedIn guest search |
+| Tests | 121, run before every scheduled fetch |
 
 ## How it works
 
@@ -41,7 +41,7 @@ These came from real runs, not from planning.
 ## Known limitations
 
 - Resume scoring (a 0 to 100 keyword overlap between a job and my CV) only runs where the CV file exists. The CV lives in a git-ignored `private/` folder, so scheduled runs on GitHub Actions log a warning and skip scoring. Scores land between about 15 and 45, so they work as a ranking rather than a percentage fit.
-- The LinkedIn adapter reads LinkedIn's public guest search pages. It is rate-limited and capped at three pages per query, and it will break if LinkedIn changes its markup.
+- The LinkedIn adapter reads LinkedIn's public guest search pages, capped at three pages per query, and will break if LinkedIn changes its markup. After nine daily searches started hitting LinkedIn's rate limit (HTTP 429), it now waits 2 seconds between requests, skips the detail page for any result whose title no lane matches or that is already saved, and retries a 429 after the server's Retry-After (capped at 60 seconds).
 - Apply URL is found for roughly 15% of LinkedIn jobs (12 of 80 when first run). Recruitment agency posts never match, nor do companies on Workday or their own careers sites, or boards whose name differs from the company name. Reading the real link from LinkedIn would need a logged-in session, which LinkedIn's terms don't allow for scraping.
 - Workable and Recruitee adapters are stubs: their public endpoints were not usable when this was built.
 - The schedule asks for 06:00 UTC, but GitHub delays scheduled runs on busy days. In practice they have started between about 10:30 and 13:00 UTC, so new postings land in Airtable around midday rather than first thing.
@@ -138,7 +138,7 @@ Put your CV (as `.md` or `.txt`) at `private/cv.md`, or pass `--resume path/to/c
 
 ### Adding a company
 
-1. Click "Apply" on any of its jobs and check where the link goes: `job-boards.greenhouse.io` (Greenhouse), `jobs.ashbyhq.com` (Ashby), `jobs.lever.co` (Lever), `jobs.smartrecruiters.com` (SmartRecruiters), `*.jobs.personio.de` (Personio).
+1. Click "Apply" on any of its jobs and check where the link goes: `job-boards.greenhouse.io` (Greenhouse), `jobs.ashbyhq.com` (Ashby), `jobs.lever.co` (Lever), `jobs.smartrecruiters.com` (SmartRecruiters), `*.jobs.personio.de` (Personio), `*.teamtailor.com` (Teamtailor; the slug is the subdomain, or the full careers URL on a custom domain).
 2. The slug is the part after the domain, e.g. `braze` in `boards.greenhouse.io/braze/jobs/123`.
 3. Check the board returns jobs:
    ```

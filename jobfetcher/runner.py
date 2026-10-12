@@ -156,7 +156,13 @@ def _process_company(
 
     logger.info("Fetching %s (%s/%s)...", company.name, company.ats, company.slug)
     try:
-        fetch_result: CompanyResult = adapter(company.slug, company.name)
+        if company.ats == "linkedin":
+            fetch_result: CompanyResult = adapter(
+                company.slug, company.name,
+                skip_card=_linkedin_skip_card(config, existing_urls, existing_company_titles),
+            )
+        else:
+            fetch_result = adapter(company.slug, company.name)
     except Exception as exc:
         result["outcome"] = "Failed"
         result["note"] = "Adapter crashed: {}".format(exc)
@@ -221,6 +227,8 @@ def _process_company(
 
     # Build the note for the run log.
     note_parts = [stats.summary()]
+    if fetch_result.note:
+        note_parts.insert(0, fetch_result.note)
     if dedup_result.skipped_url:
         note_parts.append("dedup (URL): {} skipped".format(len(dedup_result.skipped_url)))
     if dedup_result.skipped_title:
@@ -270,6 +278,28 @@ def _process_company(
 
     _log_run(config, company, result, dry_run)
     return result
+
+
+def _linkedin_skip_card(config: Config, existing_urls: Set[str], existing_company_titles: Set[str]):
+    """Build the test LinkedIn uses to drop search results before fetching their detail page.
+
+    A card is skipped if no title lane matches it, or if its URL or company+title
+    is already in Airtable. Those jobs would be dropped by the filter or dedup
+    anyway, so fetching their pages only costs requests (and LinkedIn rate-limits).
+    """
+    patterns = [p.lower() for lane in config.title_lanes.values() for p in lane]
+
+    def skip(card: dict) -> bool:
+        title = (card.get("title") or "").strip().lower()
+        if not any(p in title for p in patterns):
+            return True
+        url = (card.get("url") or "").split("?")[0].strip().lower()
+        if url in existing_urls:
+            return True
+        key = "{}|{}".format((card.get("company") or "").strip().lower(), title)
+        return key in existing_company_titles
+
+    return skip
 
 
 def _attach_apply_urls(

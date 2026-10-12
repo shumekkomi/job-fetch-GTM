@@ -12,12 +12,25 @@ from .models import FetchError
 USER_AGENT = "job-fetcher/1.0 (personal job search tool)"
 TIMEOUT_SECONDS = 30
 MAX_ATTEMPTS = 3
+RATE_LIMIT_BACKOFF = 20     # seconds to wait after a 429 with no Retry-After header
+MAX_RATE_LIMIT_WAIT = 60    # never wait longer than this for one 429
+
+
+def _rate_limit_wait(response: requests.Response) -> int:
+    """How long to wait after a 429: the server's Retry-After if sensible, else a fixed backoff."""
+    value = response.headers.get("Retry-After", "")
+    try:
+        seconds = int(value)
+    except (TypeError, ValueError):
+        return RATE_LIMIT_BACKOFF
+    return max(1, min(seconds, MAX_RATE_LIMIT_WAIT))
 
 
 def get(url: str, params: Optional[Dict[str, Any]] = None) -> requests.Response:
-    """GET a URL. Retries timeouts and 5xx errors; fails immediately on 4xx.
+    """GET a URL. Retries timeouts, 5xx errors and 429 rate limits; fails immediately on other 4xx.
 
     A 404 is not retried because it is an answer, not a glitch (usually a wrong slug).
+    A 429 means "slow down", so we wait (Retry-After, capped) and try again.
     Anything that still fails after the retries raises FetchError with a readable message.
     """
     last_problem = "unknown error"
@@ -31,6 +44,11 @@ def get(url: str, params: Optional[Dict[str, Any]] = None) -> requests.Response:
         else:
             if response.status_code < 400:
                 return response
+            if response.status_code == 429:
+                last_problem = "HTTP 429 from {}".format(url)
+                if attempt < MAX_ATTEMPTS:
+                    time.sleep(_rate_limit_wait(response))
+                continue
             if response.status_code < 500:
                 raise FetchError("HTTP {} from {}".format(response.status_code, url))
             last_problem = "HTTP {} from {}".format(response.status_code, url)

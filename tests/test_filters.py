@@ -198,6 +198,7 @@ class TestRealTitleLanes:
             "Email Marketing Specialist", "Marketing Automation Executive",
             "Loyalty Executive", "Growth Marketing Specialist",
             "Senior Digital Marketing Executive", "Marketing Operations Specialist",
+            "CRM Strategist",
         ]:
             assert self._lane(title) == "CRM & Lifecycle", title
 
@@ -210,6 +211,9 @@ class TestRealTitleLanes:
         assert self._lane("Performance Marketing Manager") == "Performance"
         assert self._lane("GTM Engineer") == "GTM Engineering"
         assert self._lane("Growth Marketing Manager") == "Growth"
+
+    def test_growth_marketer_matches(self):
+        assert self._lane("Growth Marketer, Reception.ai") == "Growth"
 
     def test_unrelated_titles_do_not_match(self):
         for title in ["Account Executive", "Customer Success Manager",

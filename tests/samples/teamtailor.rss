@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:tt="https://teamtailor.com/locations">
+  <channel>
+    <title>Chip</title>
+    <description>Current Vacancies</description>
+    <link>https://chip.teamtailor.com/jobs</link>
+    <item>
+      <title>CRM Strategist</title>
+      <description>&lt;p&gt;We are looking for a &lt;strong&gt;CRM Strategist&lt;/strong&gt;.&lt;/p&gt;&lt;p&gt;Salary: &#163;55,000&lt;/p&gt;</description>
+      <pubDate>Fri, 09 Oct 2026 10:43:12 +0100</pubDate>
+      <link>https://chip.teamtailor.com/jobs/8523124-crm-strategist</link>
+      <remoteStatus>hybrid</remoteStatus>
+      <guid>427b63db-d12c-4f8a-9d89-81c174682cd3</guid>
+      <tt:locations>
+        <tt:location>
+          <tt:name>Shoreditch</tt:name>
+          <tt:address>Fora - Shoreditch - Montacute Yards</tt:address>
+          <tt:zip>E1 6HU</tt:zip>
+          <tt:city>London</tt:city>
+          <tt:country>United Kingdom</tt:country>
+        </tt:location>
+      </tt:locations>
+      <tt:department>Marketing</tt:department>
+      <tt:role>CRM Marketing Manager</tt:role>
+    </item>
+    <item>
+      <title>Senior Backend Engineer</title>
+      <description>&lt;p&gt;Remote role.&lt;/p&gt;</description>
+      <pubDate>Mon, 05 Oct 2026 09:00:00 +0100</pubDate>
+      <link>https://chip.teamtailor.com/jobs/8500000-senior-backend-engineer</link>
+      <remoteStatus>fully</remoteStatus>
+      <guid>aaaa</guid>
+      <tt:department>Engineering</tt:department>
+    </item>
+  </channel>
+</rss>
