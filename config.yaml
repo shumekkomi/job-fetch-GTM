@@ -2,7 +2,7 @@
 # Job Fetcher Configuration
 # -------------------------------------------------------------------
 # This file controls which companies to fetch from, which titles to
-# match, and where to write in Airtable. Edit it freely -- the script
+# match, and where results are saved. Edit it freely -- the script
 # reads it fresh on every run.
 #
 # To add a company:
@@ -33,10 +33,16 @@ include_remote: true
 # GitHub Actions), scoring is skipped with a warning.
 resume_path: "private/cv.md"
 
-# Airtable location and access come from environment variables, not this file,
-# so the public repo doesn't point at anyone's base:
-#   AIRTABLE_TOKEN, AIRTABLE_BASE_ID, AIRTABLE_JOBS_TABLE_ID, AIRTABLE_RUNLOG_TABLE_ID
-# Only real runs need them. --dry-run works without.
+# Where results are saved: "supabase" (the jobhunt schema in a Supabase
+# Postgres database) or "airtable". Switched from Airtable on 6 Nov 2026.
+storage: supabase
+
+# Connection details come from environment variables, not this file, so the
+# public repo doesn't point at anyone's database or base:
+#   supabase: SUPABASE_DB_URL (the Session pooler connection string)
+#   airtable: AIRTABLE_TOKEN, AIRTABLE_BASE_ID, AIRTABLE_JOBS_TABLE_ID, AIRTABLE_RUNLOG_TABLE_ID
+# Only real runs need them. --dry-run works without, and with them it also
+# checks the connection and dedups against what is already saved.
 
 # -------------------------------------------------------------------
 # Title lanes

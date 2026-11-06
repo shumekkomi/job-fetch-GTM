@@ -1,6 +1,6 @@
 # Job Fetcher
 
-A scheduled pipeline that pulls job listings straight from company ATS APIs, filters them, deduplicates them against what is already tracked, and writes new matches to Airtable with the full job description captured at fetch time. It also writes a run log row for every source on every run, including the ones that fail.
+A scheduled pipeline that pulls job listings straight from company ATS APIs, filters them, deduplicates them against what is already tracked, and saves new matches to a Postgres database on Supabase with the full job description captured at fetch time. It also writes a run log row for every source on every run, including the ones that fail.
 
 It runs once a day on GitHub Actions. It makes no LLM calls: the job text stored is exactly what the company published.
 
@@ -10,6 +10,12 @@ It runs once a day on GitHub Actions. It makes no LLM calls: the job text stored
 
 The first version was a Claude skill that fetched, cleaned and wrote records through Airtable's MCP server. It worked, but it was the wrong tool for the job. Fetching and filtering are the same steps every day, and an LLM doing them costs tokens on every record, can paraphrase a job description instead of storing it word for word, and cannot be covered by tests. So the fetching, filtering and deduplication moved into this Python script, which is deterministic, testable and free to run. Judgement work, like deciding whether a role is worth applying for, stays with me and with Claude outside this repo.
 
+## Where results are saved
+
+Until 6 November 2026 results went to Airtable. The free plan's record cap was about to stop the daily writes, and a spreadsheet tool was the wrong place for the analysis that comes next (salary bands, requirement counts, how long roles stay open). So results now go to a `jobhunt` schema in a Supabase Postgres database, alongside the applications and CV versions they get compared against. The 266 jobs and 1,816 run log rows already in Airtable were copied across first, so dedup still sees everything saved before the switch.
+
+The script connects straight to the database rather than through Supabase's web API, so the schema never has to be exposed publicly. Airtable still works: set `storage: airtable` in `config.yaml`.
+
 ## What it covers
 
 | | Count |
@@ -17,15 +23,15 @@ The first version was a Claude skill that fetched, cleaned and wrote records thr
 | Active sources | 33 (13 Greenhouse boards, 8 Ashby boards, 2 Teamtailor sites, 1 SmartRecruiters board, 9 LinkedIn title searches) |
 | Companies checked and logged as having no public ATS | 10 |
 | ATS adapters | Greenhouse, Ashby, Lever, SmartRecruiters, Personio, Teamtailor (RSS), generic schema.org JSON-LD, LinkedIn guest search |
-| Tests | 121, run before every scheduled fetch |
+| Tests | 134, run before every scheduled fetch |
 
 ## How it works
 
 1. **Fetch.** Each company in `config.yaml` is fetched with the adapter for its ATS. LinkedIn entries are title searches rather than company boards, so they find employers that are not on the watchlist.
 2. **Filter.** Location (London by default, with per-company aliases; with `include_remote` on, remote roles from any region are kept too, and labelled in Location when they're listed for another region or don't say), title (substring match into five lanes: CRM & Lifecycle, RevOps, Growth, Performance, GTM Engineering) and a salary floor that only drops roles explicitly paying below it.
-3. **Deduplicate.** Against existing Airtable records, first by URL, then by company plus title, so the same role found through two sources is only written once.
+3. **Deduplicate.** Against every job already saved, first by URL, then by company plus title, so the same role found through two sources is only written once.
 4. **Find the original posting (LinkedIn jobs only).** LinkedIn hides where "Apply" leads from logged-out visitors, so for each new LinkedIn job the pipeline guesses the company's board name and looks on Greenhouse, Ashby, Lever and SmartRecruiters. If a posting with exactly the same title is there, its link goes in **Apply URL**. If that posting was already saved straight from the company's board, the LinkedIn copy is skipped as a duplicate.
-5. **Write.** New jobs go to the Jobs table with the full description. Every source gets a Run Log row with its outcome (OK, Empty, Failed, Skipped) and a note.
+5. **Save.** New jobs go to the jobs table with the full description and, where the source gives one, the structured salary range. Every source gets a run log row with its outcome (OK, Empty, Failed, Skipped) and a note.
 
 ## Failure modes it handles
 
@@ -35,7 +41,7 @@ These came from real runs, not from planning.
 - **Locations labelled by country instead of city.** Bloomreach lists UK roles as "United Kingdom", so a London filter silently dropped them. Config now supports per-company location aliases.
 - **Companies with no public ATS.** Ten watchlist companies (proprietary systems, Workday, Jobvite) cannot be polled. They stay in config with status `unsupported` and a dated note on what was checked, so they are not silently missing.
 - **Partial failures.** One source timing out or 404ing does not stop the run. It gets a Failed row in the Run Log and the rest carry on.
-- **Runs that pass while writing nothing.** For the first week the Airtable token was wrong, so every write got `403 Forbidden`. The script logged the errors and exited normally, so GitHub showed every run as passed. Now the run stops if it cannot read Airtable, and exits with an error if any write fails, which turns the run red and sends an email.
+- **Runs that pass while writing nothing.** For the first week the Airtable token was wrong, so every write got `403 Forbidden`. The script logged the errors and exited normally, so GitHub showed every run as passed. Now the run stops if it cannot read its storage, and exits with an error if any write fails, which turns the run red and sends an email.
 - **A duplicate check that never matched.** Airtable returns record fields keyed by field name unless the request asks for field IDs. The code looked fields up by ID, so it always saw an empty table and saved every job again each day: 476 of 556 rows were duplicates by the time it was caught. The code now uses field names everywhere (which also lets anyone run it against their own base), a test fakes Airtable's behaviour so a names-versus-IDs mismatch fails the build, and the duplicates were removed.
 
 ## Known limitations
@@ -44,7 +50,7 @@ These came from real runs, not from planning.
 - The LinkedIn adapter reads LinkedIn's public guest search pages, capped at three pages per query, and will break if LinkedIn changes its markup. After nine daily searches started hitting LinkedIn's rate limit (HTTP 429), it now waits 2 seconds between requests, skips the detail page for any result whose title no lane matches or that is already saved, and retries a 429 after the server's Retry-After (capped at 60 seconds).
 - Apply URL is found for roughly 15% of LinkedIn jobs (12 of 80 when first run). Recruitment agency posts never match, nor do companies on Workday or their own careers sites, or boards whose name differs from the company name. Reading the real link from LinkedIn would need a logged-in session, which LinkedIn's terms don't allow for scraping.
 - Workable and Recruitee adapters are stubs: their public endpoints were not usable when this was built.
-- The schedule asks for 06:00 UTC, but GitHub delays scheduled runs on busy days. In practice they have started between about 10:30 and 13:00 UTC, so new postings land in Airtable around midday rather than first thing.
+- The schedule asks for 06:00 UTC, but GitHub delays scheduled runs on busy days. In practice they have started between about 10:30 and 13:00 UTC, so new postings are saved around midday rather than first thing.
 
 ## File structure
 
@@ -58,9 +64,10 @@ jobfetcher/
     text.py                     HTML-to-text conversion and date parsing.
     http.py                     HTTP requests with retries and error handling.
     filters.py                  Location, title and salary filters.
-    dedup.py                    Dedup against existing Airtable records.
+    dedup.py                    Dedup against jobs already saved.
     resume.py                   Keyword-overlap scoring against a CV.
     apply_lookup.py             Finds a LinkedIn job's posting on the company's own board.
+    supabase_store.py           Reads from and writes to Supabase (Postgres).
     airtable.py                 Reads from and writes to Airtable.
     runner.py                   Orchestrates the full pipeline.
     adapters/                   One module per ATS (see table above).
@@ -73,7 +80,7 @@ tests/
 
 ## Running it yourself
 
-Python 3.12. A dry run needs nothing else: no Airtable, no token, no CV.
+Python 3.12. A dry run needs nothing else: no database, no token, no CV.
 
 ```bash
 python -m venv .venv
@@ -84,7 +91,48 @@ python -m pytest tests/ -v      # tests
 python run.py --dry-run         # fetch and filter, print what would be saved
 ```
 
+### Saving to your own Supabase
+
+1. In a Supabase project, open the SQL editor and create the schema:
+
+```sql
+create schema jobhunt;
+create table jobhunt.jobs (
+  id bigint generated always as identity primary key,
+  pipeline text, data_source text, job_label text,
+  company text not null, role_title text not null, source text,
+  jd_text text, raw_blob text, job_url text unique, apply_url text,
+  salary_posted text, salary_min numeric, salary_max numeric,
+  salary_currency text, salary_interval text, location text,
+  date_posted date, posted_date_kind text, fingerprint text, lane text,
+  status text, match_score numeric, first_seen timestamptz default now()
+);
+create table jobhunt.run_log (
+  id bigint generated always as identity primary key,
+  pipeline text, data_source text, target text, type text,
+  last_polled date, polled_at timestamptz default now(),
+  outcome text, listings_found integer, notes text
+);
+alter table jobhunt.jobs enable row level security;
+alter table jobhunt.run_log enable row level security;
+```
+
+   Row level security with no policies keeps both tables closed to the public API. The script isn't affected, because it connects as the database owner.
+
+2. Copy the **Session pooler** connection string from the project's Connect panel (GitHub's runners can't reach the direct connection, which is IPv6 only), put your database password in it, then:
+
+```bash
+export SUPABASE_DB_URL="postgresql://postgres.<project>:<password>@<region>.pooler.supabase.com:5432/postgres"
+python run.py --dry-run   # checks the connection and dedup, saves nothing
+python run.py
+```
+
+A real run stops straight away if `SUPABASE_DB_URL` is missing, and stops before saving anything if the database can't be read. A URL that is already saved is never overwritten.
+
 ### Saving to your own Airtable
+
+Set `storage: airtable` in `config.yaml`, then:
+
 
 1. In a base of your own, create the two tables below. Field names must match exactly (the code finds fields by name); the order doesn't matter, and extra fields are ignored.
 2. Create a [personal access token](https://airtable.com/create/tokens) with `data.records:read` and `data.records:write`, limited to that base.
@@ -130,7 +178,7 @@ Missing dropdown options are added automatically on the first save (the API's `t
 
 ### Running it on a fork
 
-Add the same four values as Actions secrets in your fork (Settings, then Secrets and variables, then Actions). GitHub switches off scheduled workflows on forks, so turn it on once from the Actions tab. "Run workflow" there starts a run straight away.
+Add `SUPABASE_DB_URL` (or the four Airtable values) as Actions secrets in your fork (Settings, then Secrets and variables, then Actions). GitHub switches off scheduled workflows on forks, so turn it on once from the Actions tab. "Run workflow" there starts a run straight away, and its dry run option checks the setup without saving anything.
 
 ### Resume scoring
 
@@ -153,4 +201,4 @@ Add it to a lane under `title_lanes` in `config.yaml`. Matching is case-insensit
 
 ### Reading a failed run
 
-Check the Actions tab for the run's log (look for `WARNING` and `ERROR` lines), then the Run Log table in Airtable, where every source has a row and failures carry the error in Notes. An **Empty** outcome usually means a wrong slug or a company that changed ATS.
+Check the Actions tab for the run's log (look for `WARNING` and `ERROR` lines), then the run log table, where every source has a row and failures carry the error in Notes. An **Empty** outcome usually means a wrong slug or a company that changed ATS.

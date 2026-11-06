@@ -2,12 +2,15 @@
 
 This is the file that `run.py` calls. It orchestrates each step in order:
   1. Load the config.
-  2. Fetch existing Airtable records (for dedup).
+  2. Fetch existing records from storage (for dedup).
   3. For each active company: fetch, filter, dedup, write.
   4. Write the run log.
 
+Storage is Airtable or Supabase, chosen by `storage` in config.yaml. The rest
+of the pipeline doesn't know or care which one it is writing to.
+
 Each company runs independently: one failing does not stop the others.
-The exception is Airtable itself: if the existing records cannot be read, the
+The exception is storage itself: if the existing records cannot be read, the
 run stops before writing anything, because writing blind creates duplicates.
 """
 from __future__ import annotations
@@ -16,8 +19,8 @@ import logging
 import sys
 from typing import List, Optional, Set, Tuple
 
+from . import airtable, supabase_store
 from .adapters import ADAPTERS
-from .airtable import fetch_existing_jobs, insert_jobs, insert_run_log
 from .apply_lookup import ApplyUrlFinder
 from .config import Company, Config
 from .dedup import dedup
@@ -26,6 +29,63 @@ from .models import CompanyResult, Job
 from .resume import extract_keywords, load_resume, score_job
 
 logger = logging.getLogger("jobfetcher")
+
+
+# ---------------------------------------------------------------------------
+# Storage: the three calls the pipeline makes, sent to Airtable or Supabase
+# ---------------------------------------------------------------------------
+
+def _storage_label(config: Config) -> str:
+    return "Supabase" if config.storage == "supabase" else "Airtable"
+
+
+def _missing_settings(config: Config) -> List[str]:
+    """Environment variables the chosen storage needs but doesn't have."""
+    if config.storage == "supabase":
+        needed = (("SUPABASE_DB_URL", config.supabase_db_url),)
+    else:
+        needed = (
+            ("AIRTABLE_BASE_ID", config.airtable_base_id),
+            ("AIRTABLE_JOBS_TABLE_ID", config.airtable_jobs_table_id),
+            ("AIRTABLE_RUNLOG_TABLE_ID", config.airtable_runlog_table_id),
+        )
+    return [name for name, value in needed if not value]
+
+
+def fetch_existing_jobs(config: Config) -> Tuple[Set[str], Set[str]]:
+    if config.storage == "supabase":
+        return supabase_store.fetch_existing_jobs()
+    return airtable.fetch_existing_jobs(config.airtable_base_id, config.airtable_jobs_table_id)
+
+
+def insert_jobs(config: Config, jobs: List[Job], source: str) -> int:
+    if config.storage == "supabase":
+        return supabase_store.insert_jobs(jobs, source=source)
+    return airtable.insert_jobs(
+        config.airtable_base_id, config.airtable_jobs_table_id, jobs, source=source,
+    )
+
+
+def insert_run_log(config: Config, company: Company, outcome: str, new_count: int, note: str) -> None:
+    if config.storage == "supabase":
+        supabase_store.insert_run_log(
+            company=company.name, run_type=airtable._ats_to_type(company.ats),
+            outcome=outcome, new_count=new_count, note=note,
+        )
+        return
+    airtable.insert_run_log(
+        config.airtable_base_id, config.airtable_runlog_table_id,
+        company=company.name, ats=company.ats,
+        outcome=outcome, new_count=new_count, note=note,
+    )
+
+
+def _close_storage(config: Config) -> None:
+    if config.storage == "supabase":
+        try:
+            supabase_store.close()
+        except Exception as exc:  # closing should never turn a good run red
+            logger.warning("Could not close the Supabase connection: %s", exc)
 
 
 def _setup_logging() -> None:
@@ -38,19 +98,28 @@ def _setup_logging() -> None:
 def run(config: Config, dry_run: bool = False, resume_path: Optional[str] = None) -> dict:
     """Run the full pipeline. Returns a summary dict for testing/inspection.
 
-    If dry_run is True, fetches and filters but writes nothing to Airtable.
+    If dry_run is True, fetches and filters but writes nothing. A dry run still
+    reads existing records when the storage settings are present, so it shows
+    the real dedup result and proves the connection works.
     resume_path overrides config.resume_path (CLI flag wins over config file).
     """
     _setup_logging()
+    try:
+        return _run(config, dry_run, resume_path)
+    finally:
+        _close_storage(config)
 
+
+def _run(config: Config, dry_run: bool, resume_path: Optional[str]) -> dict:
     summary = {
         "companies_processed": 0,
         "total_new_jobs": 0,
         "results": [],    # one dict per company
         "dry_run": dry_run,
         "aborted": False,
-        "airtable_errors": 0,
+        "airtable_errors": 0,  # failed storage writes (name kept from the Airtable-only version)
     }
+    label = _storage_label(config)
 
     # -- Load resume keywords if a resume was provided --
     resume_file = resume_path or config.resume_path
@@ -63,33 +132,29 @@ def run(config: Config, dry_run: bool = False, resume_path: Optional[str] = None
         except (FileNotFoundError, ValueError) as exc:
             logger.warning("Could not load resume: %s (scoring disabled)", exc)
 
-    # -- Step 1: fetch existing Airtable records for dedup --
+    # -- Step 1: fetch existing records for dedup --
     existing_urls: Set[str] = set()
     existing_company_titles: Set[str] = set()
-    if not dry_run:
-        missing = [name for name, value in (
-            ("AIRTABLE_BASE_ID", config.airtable_base_id),
-            ("AIRTABLE_JOBS_TABLE_ID", config.airtable_jobs_table_id),
-            ("AIRTABLE_RUNLOG_TABLE_ID", config.airtable_runlog_table_id),
-        ) if not value]
-        if missing:
-            logger.error("Stopping: environment variables not set: %s", ", ".join(missing))
-            summary["aborted"] = True
-            return summary
+    missing = _missing_settings(config)
+    if missing and not dry_run:
+        logger.error("Stopping: environment variables not set: %s", ", ".join(missing))
+        summary["aborted"] = True
+        return summary
+    if not missing:
         try:
-            logger.info("Fetching existing Airtable records for dedup...")
-            existing_urls, existing_company_titles = fetch_existing_jobs(
-                config.airtable_base_id, config.airtable_jobs_table_id
-            )
+            logger.info("Fetching existing %s records for dedup...", label)
+            existing_urls, existing_company_titles = fetch_existing_jobs(config)
             logger.info(
                 "Found %d existing URLs and %d company+title pairs",
                 len(existing_urls), len(existing_company_titles),
             )
         except Exception as exc:
-            logger.error("Could not fetch existing records: %s", exc)
+            logger.error("Could not fetch existing records from %s: %s", label, exc)
             logger.error("Stopping: without dedup every job would be written again.")
             summary["aborted"] = True
             return summary
+    else:
+        logger.info("Dry run without %s settings: dedup against existing records skipped.", label)
 
     # -- Step 2: process each company --
     active_companies = [c for c in config.companies if c.status == "active"]
@@ -123,7 +188,7 @@ def run(config: Config, dry_run: bool = False, resume_path: Optional[str] = None
 
     summary["airtable_errors"] = sum(1 for r in summary["results"] if r.get("airtable_error"))
     if summary["airtable_errors"]:
-        logger.error("%d Airtable writes failed. See the errors above.", summary["airtable_errors"])
+        logger.error("%d %s writes failed. See the errors above.", summary["airtable_errors"], label)
 
     logger.info(
         "Done. %d companies processed, %d new jobs %s.",
@@ -250,7 +315,7 @@ def _process_company(
         else:
             try:
                 created = insert_jobs(
-                    config.airtable_base_id, config.airtable_jobs_table_id, new_jobs,
+                    config, new_jobs,
                     source="LinkedIn" if company.ats == "linkedin" else "Direct",
                 )
                 logger.info("%s: inserted %d new jobs", company.name, created)
@@ -268,8 +333,8 @@ def _process_company(
             except Exception as exc:
                 result["outcome"] = "Failed"
                 result["airtable_error"] = True
-                result["note"] += "; Airtable write failed: {}".format(exc)
-                logger.error("%s: Airtable write failed: %s", company.name, exc)
+                result["note"] += "; {} write failed: {}".format(_storage_label(config), exc)
+                logger.error("%s: %s write failed: %s", company.name, _storage_label(config), exc)
     else:
         logger.info("%s: no new jobs to insert", company.name)
 
@@ -284,7 +349,7 @@ def _linkedin_skip_card(config: Config, existing_urls: Set[str], existing_compan
     """Build the test LinkedIn uses to drop search results before fetching their detail page.
 
     A card is skipped if no title lane matches it, or if its URL or company+title
-    is already in Airtable. Those jobs would be dropped by the filter or dedup
+    is already saved. Those jobs would be dropped by the filter or dedup
     anyway, so fetching their pages only costs requests (and LinkedIn rate-limits).
     """
     patterns = [p.lower() for lane in config.title_lanes.values() for p in lane]
@@ -307,7 +372,7 @@ def _attach_apply_urls(
 ) -> Tuple[List[Job], List[str]]:
     """Set apply_url where the company's board has the same role.
 
-    A job whose company posting is already in Airtable (saved earlier straight
+    A job whose company posting is already saved (saved earlier straight
     from that board) is dropped as a duplicate and returned as a label instead.
     """
     kept: List[Job] = []
@@ -323,13 +388,12 @@ def _attach_apply_urls(
 
 
 def _log_run(config: Config, company: Company, result: dict, dry_run: bool) -> None:
-    """Write one run log record to Airtable (unless it's a dry run)."""
+    """Write one run log record to storage (unless it's a dry run)."""
     if dry_run:
         return
     try:
         insert_run_log(
-            config.airtable_base_id, config.airtable_runlog_table_id,
-            company=company.name, ats=company.ats,
+            config, company,
             outcome=result["outcome"], new_count=result.get("new_count", 0),
             note=result.get("note", ""),
         )
@@ -341,7 +405,7 @@ def _log_run(config: Config, company: Company, result: dict, dry_run: bool) -> N
 def exit_code(summary: dict) -> int:
     """1 if the run should show as failed on GitHub Actions, else 0.
 
-    A run fails if it stopped early, if any Airtable write failed, or if every
+    A run fails if it stopped early, if any storage write failed, or if every
     source it actually tried to fetch failed. Skipped sources don't count,
     otherwise a single skipped company would hide a total outage.
     """

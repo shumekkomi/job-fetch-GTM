@@ -2,7 +2,7 @@
 """Entry point for the job fetcher.
 
 Usage:
-    python run.py                  # full run: fetch, filter, dedup, write to Airtable
+    python run.py                  # full run: fetch, filter, dedup, save
     python run.py --dry-run        # fetch and filter, but don't write anything
     python run.py --config other.yaml   # use a different config file
     python run.py --resume cv.md        # score jobs against a different CV
@@ -19,11 +19,11 @@ from jobfetcher.runner import exit_code, run
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Fetch job listings from ATS APIs and write them to Airtable."
+        description="Fetch job listings from ATS APIs and save them to Supabase or Airtable."
     )
     parser.add_argument(
         "--dry-run", action="store_true",
-        help="Fetch and filter, but don't write to Airtable. Shows what would be inserted.",
+        help="Fetch and filter, but save nothing. Shows what would be inserted.",
     )
     parser.add_argument(
         "--config", default="config.yaml",
