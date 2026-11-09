@@ -1,5 +1,6 @@
-# Fetch jobs from ATS APIs and write them to Airtable.
-# Runs once a day, plus a manual "Run workflow" button on the Actions tab.
+# Fetch jobs from ATS APIs and save them to Supabase (or Airtable, per
+# `storage` in config.yaml). Runs once a day, plus a manual "Run workflow"
+# button on the Actions tab, which can also do a dry run.
 
 name: Fetch Jobs
 
@@ -9,8 +10,13 @@ on:
     # winter. GitHub often starts scheduled runs hours late on busy days.
     - cron: "0 6 * * *"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: fetch, filter and dedup, but save nothing"
+        type: boolean
+        default: false
 
-# The job only reads the code. Airtable access comes from the secret below,
+# The job only reads the code. Database access comes from the secrets below,
 # not from GitHub's token, so GitHub's token gets no write access.
 permissions:
   contents: read
@@ -38,11 +44,14 @@ jobs:
         run: python -m pytest tests/ -v
 
       # Stored as secrets rather than in config.yaml so the public repo and
-      # the public run logs (secrets are masked) never show which base to target.
+      # the public run logs (secrets are masked) never show where results go.
+      # The Airtable secrets are only read if config.yaml switches back to it.
       - name: Fetch jobs
         env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
           AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
           AIRTABLE_JOBS_TABLE_ID: ${{ secrets.AIRTABLE_JOBS_TABLE_ID }}
           AIRTABLE_RUNLOG_TABLE_ID: ${{ secrets.AIRTABLE_RUNLOG_TABLE_ID }}
-        run: python run.py
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: python run.py $DRY_RUN

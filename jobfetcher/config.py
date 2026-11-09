@@ -17,6 +17,8 @@ from typing import Dict, List, Optional
 
 import yaml
 
+STORAGE_OPTIONS = ("airtable", "supabase")
+
 
 @dataclass
 class Company:
@@ -41,6 +43,8 @@ class Config:
     default_location: str = "London"     # the default location to filter for
     salary_floor_gbp: float = 35000.0    # drop jobs with salary explicitly below this
     include_remote: bool = False         # keep remote roles from any region, labelled
+    storage: str = "airtable"            # where results go: "airtable" or "supabase"
+    supabase_db_url: str = ""
     airtable_base_id: str = ""
     airtable_jobs_table_id: str = ""
     airtable_runlog_table_id: str = ""
@@ -80,13 +84,22 @@ def load_config(path: str = "config.yaml") -> Config:
     if not title_lanes:
         raise ValueError("Config must have at least one entry in 'title_lanes'")
 
+    # -- Storage --
+    storage = str(raw.get("storage", "airtable")).strip().lower()
+    if storage not in STORAGE_OPTIONS:
+        raise ValueError("Config 'storage' must be one of {}, got {!r}".format(
+            ", ".join(STORAGE_OPTIONS), storage))
+
     return Config(
         companies=companies,
         title_lanes=title_lanes,
         default_location=raw.get("default_location", "London"),
         salary_floor_gbp=float(raw.get("salary_floor_gbp", 35000)),
         include_remote=bool(raw.get("include_remote", False)),
-        # From the environment so the public repo doesn't reveal which base to target.
+        storage=storage,
+        # Secrets and IDs come from the environment so the public repo doesn't
+        # reveal where results are written.
+        supabase_db_url=os.environ.get("SUPABASE_DB_URL", ""),
         airtable_base_id=os.environ.get("AIRTABLE_BASE_ID", ""),
         airtable_jobs_table_id=os.environ.get("AIRTABLE_JOBS_TABLE_ID", ""),
         airtable_runlog_table_id=os.environ.get("AIRTABLE_RUNLOG_TABLE_ID", ""),
