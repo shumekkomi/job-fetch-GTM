@@ -100,3 +100,45 @@ def test_linkedin_skip_card_drops_excluded_titles():
     skip = _linkedin_skip_card(cfg, set(), set())
     assert skip({"title": "Senior CRM Executive", "company": "Acme", "url": "u1"}) is True
     assert skip({"title": "CRM Executive", "company": "Acme", "url": "u2"}) is False
+
+
+def test_linkedin_searches_run_once_per_window_narrowest_first():
+    from jobfetcher.config import Company, LinkedInWindow
+    from jobfetcher.runner import _expand_linkedin
+    cfg = Config(companies=[], title_lanes={"CRM & Lifecycle": ["crm"]},
+                 linkedin_windows=[LinkedInWindow("24h", 24), LinkedInWindow("3 days", 72)])
+    companies = [Company(name="Braze", ats="greenhouse", slug="braze"),
+                 Company(name="LinkedIn: CRM Executive", ats="linkedin", slug="CRM Executive")]
+    out = _expand_linkedin(companies, cfg)
+    assert [(c.name, c.posted_within) for c in out] == [
+        ("Braze", None),
+        ("LinkedIn: CRM Executive (24h)", 86400),
+        ("LinkedIn: CRM Executive (3 days)", 259200),
+    ]
+    assert all(c.slug == "CRM Executive" for c in out[1:])
+
+
+def test_no_windows_keeps_one_search():
+    from jobfetcher.config import Company
+    from jobfetcher.runner import _expand_linkedin
+    cfg = Config(companies=[], title_lanes={"CRM & Lifecycle": ["crm"]})
+    companies = [Company(name="LinkedIn: CRM Executive", ats="linkedin", slug="CRM Executive")]
+    assert _expand_linkedin(companies, cfg) == companies
+
+
+def test_windowed_search_passes_window_to_adapter(monkeypatch):
+    from jobfetcher import runner
+    from jobfetcher.config import Company
+    from jobfetcher.models import CompanyResult
+    seen = {}
+
+    def fake_linkedin(slug, name, skip_card=None, posted_within=None):
+        seen["posted_within"] = posted_within
+        return CompanyResult(company=name, ats="linkedin", outcome="Empty", note="none")
+
+    monkeypatch.setattr(runner, "ADAPTERS", {"linkedin": fake_linkedin})
+    monkeypatch.setattr(runner, "_log_run", lambda *a, **k: None)
+    cfg = Config(companies=[], title_lanes={"CRM & Lifecycle": ["crm"]})
+    company = Company(name="LinkedIn: CRM (24h)", ats="linkedin", slug="CRM", posted_within=86400)
+    runner._process_company(company, cfg, set(), set(), dry_run=True)
+    assert seen["posted_within"] == 86400

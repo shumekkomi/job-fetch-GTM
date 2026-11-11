@@ -83,13 +83,26 @@ class _SearchParser(HTMLParser):
             self._current = {}
 
 
-def _search_page(query: str, location: str, start: int) -> List[Dict[str, str]]:
+def _search_params(query: str, location: str, start: int,
+                   posted_within: Optional[int] = None) -> Dict[str, Any]:
+    """Query parameters for one page of search results.
+
+    With posted_within (seconds), results are limited to roles posted in that
+    window and sorted newest first, the same as LinkedIn's own "Date posted"
+    filter and "Most recent" sort. Without it, LinkedIn ranks by relevance
+    across every age, so old adverts can fill the 30 results we read.
+    """
+    params: Dict[str, Any] = {"keywords": query, "location": location, "start": start}
+    if posted_within:
+        params["f_TPR"] = "r{}".format(int(posted_within))
+        params["sortBy"] = "DD"
+    return params
+
+
+def _search_page(query: str, location: str, start: int,
+                 posted_within: Optional[int] = None) -> List[Dict[str, str]]:
     """Fetch one page of LinkedIn search results."""
-    response = get(SEARCH_URL, params={
-        "keywords": query,
-        "location": location,
-        "start": start,
-    })
+    response = get(SEARCH_URL, params=_search_params(query, location, start, posted_within))
     parser = _SearchParser()
     parser.feed(response.text)
     return parser.jobs
@@ -150,6 +163,7 @@ def fetch(
     slug: str,
     company: str,
     skip_card: Optional[Callable[[Dict[str, str]], bool]] = None,
+    posted_within: Optional[int] = None,
 ) -> CompanyResult:
     """Search LinkedIn for jobs matching `slug` (a keyword) in London.
 
@@ -159,6 +173,8 @@ def fetch(
     `skip_card` lets the caller drop search results before their detail page is
     fetched (e.g. a title no lane matches, or a URL already saved). Most results
     on a daily run are one or the other, so this cuts requests to LinkedIn sharply.
+
+    `posted_within` (seconds) limits results to that window, newest first.
     """
     query = slug  # for linkedin, the slug IS the search keyword
     location = "London"
@@ -166,7 +182,7 @@ def fetch(
     all_cards: List[Dict[str, str]] = []
     try:
         for page in range(MAX_PAGES):
-            cards = _search_page(query, location, page * RESULTS_PER_PAGE)
+            cards = _search_page(query, location, page * RESULTS_PER_PAGE, posted_within)
             all_cards.extend(cards)
             if len(cards) < RESULTS_PER_PAGE:
                 break  # no more results

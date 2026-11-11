@@ -63,3 +63,24 @@ def test_escaped_description_is_unescaped_with_line_breaks():
     assert "&lt;" not in text and "<" not in text
     assert "The Press & Journal." in text
     assert "\n- 3+ years of CRM experience\n" in text and "\n- HubSpot" in text
+
+
+def test_search_params_add_date_window_and_newest_first():
+    from jobfetcher.adapters.linkedin import _search_params
+    plain = _search_params("CRM Executive", "London", 10)
+    assert plain == {"keywords": "CRM Executive", "location": "London", "start": 10}
+    windowed = _search_params("CRM Executive", "London", 0, posted_within=86400)
+    assert windowed["f_TPR"] == "r86400"
+    assert windowed["sortBy"] == "DD"
+
+
+def test_window_is_sent_on_every_page():
+    from unittest.mock import patch
+    from jobfetcher.adapters import linkedin
+
+    full_page = [{"title": "CRM Executive", "company": "A", "url": "https://uk.linkedin.com/jobs/view/{}".format(i),
+                  "location": "London"} for i in range(linkedin.RESULTS_PER_PAGE)]
+    with patch.object(linkedin, "_search_page", side_effect=[full_page, []]) as search, \
+         patch.object(linkedin.time, "sleep"):
+        linkedin.fetch("CRM", "LinkedIn: CRM", skip_card=lambda c: True, posted_within=259200)
+    assert [c.args[3] for c in search.call_args_list] == [259200, 259200]

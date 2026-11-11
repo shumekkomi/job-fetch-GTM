@@ -20,10 +20,10 @@ The script connects straight to the database rather than through Supabase's web 
 
 | | Count |
 |---|---|
-| Active sources | 34 (13 Greenhouse boards, 8 Ashby boards, 2 Teamtailor sites, 1 SmartRecruiters board, 10 LinkedIn title searches) |
+| Active sources | 34 (13 Greenhouse boards, 8 Ashby boards, 2 Teamtailor sites, 1 SmartRecruiters board, 10 LinkedIn title searches, each run twice: posted in the last 24 hours and in the last 3 days, newest first) |
 | Companies checked and logged as having no public ATS | 10 |
 | ATS adapters | Greenhouse, Ashby, Lever, SmartRecruiters, Personio, Teamtailor (RSS), generic schema.org JSON-LD, LinkedIn guest search |
-| Tests | 170, run before every scheduled fetch |
+| Tests | 177, run before every scheduled fetch |
 
 ## How it works
 
@@ -47,7 +47,7 @@ These came from real runs, not from planning.
 ## Known limitations
 
 - Resume scoring (a 0 to 100 keyword overlap between a job and my CV) only runs where the CV file exists. The CV lives in a git-ignored `private/` folder, so scheduled runs on GitHub Actions log a warning and skip scoring. Scores land between about 15 and 45, so they work as a ranking rather than a percentage fit.
-- The LinkedIn adapter reads LinkedIn's public guest search pages, capped at three pages per query, and will break if LinkedIn changes its markup. After nine daily searches started hitting LinkedIn's rate limit (HTTP 429), it now waits 2 seconds between requests, skips the detail page for any result whose title no lane matches, has an exclude word or is already saved, and retries a 429 after the server's Retry-After (capped at 60 seconds).
+- The LinkedIn adapter reads LinkedIn's public guest search pages, capped at three pages (30 results) per query. Each query runs twice, limited to roles posted in the last 24 hours and the last 3 days and sorted newest first (`linkedin_windows` in config.yaml), because unfiltered results are ranked by relevance across every age and old adverts filled the 30 slots. It will break if LinkedIn changes its markup. After nine daily searches started hitting LinkedIn's rate limit (HTTP 429), it now waits 2 seconds between requests, skips the detail page for any result whose title no lane matches, has an exclude word or is already saved, and retries a 429 after the server's Retry-After (capped at 60 seconds).
 - Apply URL is found for roughly 15% of LinkedIn jobs (12 of 80 when first run). Recruitment agency posts never match, nor do companies on Workday or their own careers sites, or boards whose name differs from the company name. Reading the real link from LinkedIn would need a logged-in session, which LinkedIn's terms don't allow for scraping.
 - Workable and Recruitee adapters are stubs: their public endpoints were not usable when this was built. `probe_workable.py` (manual workflow "Probe Workable search") tests whether Workable's cross-employer search at jobs.workable.com can be read instead. It saves nothing.
 - The title and description rules were tuned on 131 roles I applied to, shortlisted or skipped (Sep to Nov 2026). They kept 79 of the 80 I acted on or held and dropped 19 of the 24 I hard-skipped. Tested on the same roles they were written from, so expect them to do somewhat worse on new ones.

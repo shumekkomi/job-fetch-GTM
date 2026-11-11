@@ -228,3 +228,23 @@ class TestStorageSetting:
     def test_rejects_unknown_storage(self, tmp_path):
         with pytest.raises(ValueError):
             load_config(self._write(tmp_path, "storage: notion\n"))
+
+
+def test_linkedin_windows_read_from_config(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "companies:\n  - name: TestCo\n    ats: greenhouse\n    slug: testco\n"
+        "title_lanes:\n  Growth: [Growth Marketing Manager]\n"
+        "linkedin_windows:\n  - {label: 24h, hours: 24}\n  - {label: 3 days, hours: 72}\n")
+    config = load_config(str(path))
+    assert [(w.label, w.hours) for w in config.linkedin_windows] == [("24h", 24), ("3 days", 72)]
+
+
+def test_bad_linkedin_window_rejected(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "companies:\n  - name: TestCo\n    ats: greenhouse\n    slug: testco\n"
+        "title_lanes:\n  Growth: [Growth Marketing Manager]\n"
+        "linkedin_windows:\n  - {label: 24h}\n")
+    with pytest.raises(ValueError):
+        load_config(str(path))
