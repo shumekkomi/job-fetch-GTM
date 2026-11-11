@@ -15,6 +15,10 @@ on:
         description: "Dry run: fetch, filter and dedup, but save nothing"
         type: boolean
         default: false
+      catch_up:
+        description: "Catch-up: LinkedIn searches with no date limit (one-off sweep of older roles)"
+        type: boolean
+        default: false
 
 # The job only reads the code. Database access comes from the secrets below,
 # not from GitHub's token, so GitHub's token gets no write access.
@@ -56,4 +60,5 @@ jobs:
           AIRTABLE_JOBS_TABLE_ID: ${{ secrets.AIRTABLE_JOBS_TABLE_ID }}
           AIRTABLE_RUNLOG_TABLE_ID: ${{ secrets.AIRTABLE_RUNLOG_TABLE_ID }}
           DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
-        run: python run.py $DRY_RUN
+          CATCH_UP: ${{ inputs.catch_up && '--catch-up' || '' }}
+        run: python run.py $DRY_RUN $CATCH_UP

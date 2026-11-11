@@ -142,3 +142,29 @@ def test_windowed_search_passes_window_to_adapter(monkeypatch):
     company = Company(name="LinkedIn: CRM (24h)", ats="linkedin", slug="CRM", posted_within=86400)
     runner._process_company(company, cfg, set(), set(), dry_run=True)
     assert seen["posted_within"] == 86400
+
+
+def test_catch_up_flag_drops_linkedin_windows(monkeypatch, tmp_path):
+    import run as entry
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "companies:\n  - name: TestCo\n    ats: greenhouse\n    slug: testco\n"
+        "title_lanes:\n  Growth: [Growth Marketing Manager]\n"
+        "linkedin_windows:\n  - {label: 24h, hours: 24}\n")
+    seen = {}
+
+    def fake_run(config, dry_run=False, resume_path=None):
+        seen["windows"] = config.linkedin_windows
+        seen["dry_run"] = dry_run
+        return {}
+
+    monkeypatch.setattr(entry, "run", fake_run)
+    monkeypatch.setattr(entry, "exit_code", lambda summary: 0)
+    for argv, expected in ((["--catch-up"], []), ([], ["24h"])):
+        monkeypatch.setattr("sys.argv", ["run.py", "--dry-run", "--config", str(path)] + argv)
+        try:
+            entry.main()
+        except SystemExit:
+            pass
+        assert [w.label for w in seen["windows"]] == expected
+        assert seen["dry_run"] is True
