@@ -37,6 +37,7 @@ class Job:
     lane: Optional[str] = None       # set later by the title filter
     match_score: Optional[int] = None  # 0–100 resume match, set by the scorer
     apply_url: Optional[str] = None  # the company's own posting, when found for a LinkedIn job
+    notes: str = ""                  # fit flags from the description, set by the filter
 
     @property
     def fingerprint(self) -> str:

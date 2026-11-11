@@ -17,6 +17,8 @@ from typing import Dict, List, Optional
 
 import yaml
 
+from .fit import DescriptionChecks, load_description_checks
+
 STORAGE_OPTIONS = ("airtable", "supabase")
 
 
@@ -33,13 +35,23 @@ class Company:
     location_aliases: List[str] = field(default_factory=list)
     # If True, keep remote roles with no region stated and mark them.
     keep_unqualified_remote: bool = False
+    # LinkedIn only: limit the search to roles posted in this many seconds,
+    # newest first. Set by the runner from linkedin_windows, not in YAML.
+    posted_within: Optional[int] = None
+
+
+@dataclass
+class LinkedInWindow:
+    """One "date posted" window each LinkedIn search runs with."""
+    label: str   # added to the search's name in the run log, e.g. "24h"
+    hours: int
 
 
 @dataclass
 class Config:
     """Everything the script needs to run."""
     companies: List[Company]
-    title_lanes: Dict[str, List[str]]    # lane name -> list of title substrings
+    title_lanes: Dict[str, List[str]]    # lane name -> words or phrases matched in the title
     default_location: str = "London"     # the default location to filter for
     salary_floor_gbp: float = 35000.0    # drop jobs with salary explicitly below this
     include_remote: bool = False         # keep remote roles from any region, labelled
@@ -49,6 +61,13 @@ class Config:
     airtable_jobs_table_id: str = ""
     airtable_runlog_table_id: str = ""
     resume_path: Optional[str] = None  # path to a .txt/.md resume for scoring
+    # Titles containing any of these words are dropped even if a lane matches.
+    title_exclude: List[str] = field(default_factory=list)
+    # Knock-outs and flags read from the job description. None = no checks.
+    description_checks: Optional[DescriptionChecks] = None
+    # Each LinkedIn search runs once per window, newest first. Empty = one
+    # search ranked by relevance across every age (the old behaviour).
+    linkedin_windows: List[LinkedInWindow] = field(default_factory=list)
 
 
 def load_config(path: str = "config.yaml") -> Config:
@@ -84,6 +103,19 @@ def load_config(path: str = "config.yaml") -> Config:
     if not title_lanes:
         raise ValueError("Config must have at least one entry in 'title_lanes'")
 
+    title_exclude = raw.get("title_exclude") or []
+    if not isinstance(title_exclude, list):
+        raise ValueError("Config 'title_exclude' must be a list of words or phrases")
+
+    linkedin_windows = []
+    for entry in raw.get("linkedin_windows") or []:
+        if not isinstance(entry, dict) or "label" not in entry or "hours" not in entry:
+            raise ValueError("Each 'linkedin_windows' entry needs a label and hours")
+        hours = int(entry["hours"])
+        if hours <= 0:
+            raise ValueError("'linkedin_windows' hours must be above 0")
+        linkedin_windows.append(LinkedInWindow(label=str(entry["label"]), hours=hours))
+
     # -- Storage --
     storage = str(raw.get("storage", "airtable")).strip().lower()
     if storage not in STORAGE_OPTIONS:
@@ -104,4 +136,7 @@ def load_config(path: str = "config.yaml") -> Config:
         airtable_jobs_table_id=os.environ.get("AIRTABLE_JOBS_TABLE_ID", ""),
         airtable_runlog_table_id=os.environ.get("AIRTABLE_RUNLOG_TABLE_ID", ""),
         resume_path=raw.get("resume_path"),
+        title_exclude=[str(w) for w in title_exclude],
+        description_checks=load_description_checks(raw.get("description_checks")),
+        linkedin_windows=linkedin_windows,
     )

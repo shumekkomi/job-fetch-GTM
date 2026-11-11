@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from dataclasses import replace
 from typing import List, Optional, Set, Tuple
 
 from . import airtable, supabase_store
@@ -25,6 +26,7 @@ from .apply_lookup import ApplyUrlFinder
 from .config import Company, Config
 from .dedup import dedup
 from .filters import filter_jobs
+from .fit import title_passes
 from .models import CompanyResult, Job
 from .resume import extract_keywords, load_resume, score_job
 
@@ -168,7 +170,7 @@ def _run(config: Config, dry_run: bool, resume_path: Optional[str]) -> dict:
     )
 
     apply_finder = ApplyUrlFinder()  # shared so each company's board is looked up once per run
-    for company in active_companies:
+    for company in _expand_linkedin(active_companies, config):
         result = _process_company(
             company, config, existing_urls, existing_company_titles, dry_run,
             resume_keywords, apply_finder,
@@ -225,6 +227,7 @@ def _process_company(
             fetch_result: CompanyResult = adapter(
                 company.slug, company.name,
                 skip_card=_linkedin_skip_card(config, existing_urls, existing_company_titles),
+                posted_within=company.posted_within,
             )
         else:
             fetch_result = adapter(company.slug, company.name)
@@ -345,19 +348,43 @@ def _process_company(
     return result
 
 
+def _expand_linkedin(companies: List[Company], config: Config) -> List[Company]:
+    """Run each LinkedIn search once per window in linkedin_windows, in order.
+
+    "LinkedIn: CRM Executive" with windows 24h and 3 days becomes
+    "LinkedIn: CRM Executive (24h)" and "LinkedIn: CRM Executive (3 days)".
+    The narrower window should come first: on a real run its saves are added
+    to the dedup sets, so the wider search skips them before fetching pages.
+    """
+    if not config.linkedin_windows:
+        return list(companies)
+    expanded: List[Company] = []
+    for company in companies:
+        if company.ats != "linkedin":
+            expanded.append(company)
+            continue
+        for window in config.linkedin_windows:
+            expanded.append(replace(
+                company,
+                name="{} ({})".format(company.name, window.label),
+                posted_within=window.hours * 3600,
+            ))
+    return expanded
+
+
 def _linkedin_skip_card(config: Config, existing_urls: Set[str], existing_company_titles: Set[str]):
     """Build the test LinkedIn uses to drop search results before fetching their detail page.
 
-    A card is skipped if no title lane matches it, or if its URL or company+title
+    A card is skipped if no title lane matches it, an exclude word is in its
+    title (e.g. Senior), or if its URL or company+title
     is already saved. Those jobs would be dropped by the filter or dedup
     anyway, so fetching their pages only costs requests (and LinkedIn rate-limits).
     """
-    patterns = [p.lower() for lane in config.title_lanes.values() for p in lane]
-
     def skip(card: dict) -> bool:
-        title = (card.get("title") or "").strip().lower()
-        if not any(p in title for p in patterns):
+        raw_title = (card.get("title") or "").strip()
+        if not title_passes(raw_title, config.title_lanes, config.title_exclude):
             return True
+        title = raw_title.lower()
         url = (card.get("url") or "").split("?")[0].strip().lower()
         if url in existing_urls:
             return True

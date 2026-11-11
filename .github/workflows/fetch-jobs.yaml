@@ -1,18 +1,25 @@
 # Fetch jobs from ATS APIs and save them to Supabase (or Airtable, per
-# `storage` in config.yaml). Runs once a day, plus a manual "Run workflow"
-# button on the Actions tab, which can also do a dry run.
+# `storage` in config.yaml). Runs three times a day, plus a manual "Run
+# workflow" button on the Actions tab, which can also do a dry run.
 
 name: Fetch Jobs
 
 on:
   schedule:
-    # Cron here is UTC only: 06:00 UTC is 07:00 UK time in summer, 06:00 in
-    # winter. GitHub often starts scheduled runs hours late on busy days.
-    - cron: "0 6 * * *"
+    # Three runs a day so new roles are seen within hours (since 11 Nov 2026).
+    # Cron here is UTC only: these are 07:17, 12:17 and 17:17 UK time in
+    # winter, an hour later in summer. GitHub often starts scheduled runs late,
+    # most of all at the top of the hour, hence :17. The LinkedIn 24-hour
+    # window covers the gaps between runs; already-saved roles are skipped.
+    - cron: "17 7,12,17 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
         description: "Dry run: fetch, filter and dedup, but save nothing"
+        type: boolean
+        default: false
+      catch_up:
+        description: "Catch-up: LinkedIn searches with no date limit (one-off sweep of older roles)"
         type: boolean
         default: false
 
@@ -21,10 +28,18 @@ on:
 permissions:
   contents: read
 
+# A late scheduled run can overlap the next one. Queue it instead of running
+# both at once, so two runs never save the same new role in parallel.
+concurrency:
+  group: fetch-jobs
+  cancel-in-progress: false
+
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Each LinkedIn search runs twice (24h and 3 days) since 11 Nov 2026; a dry
+    # run then took 21 minutes, so 25 left too little room.
+    timeout-minutes: 45
 
     steps:
       # Actions are pinned to exact commits: a tag like v4 can be moved to new
@@ -54,4 +69,5 @@ jobs:
           AIRTABLE_JOBS_TABLE_ID: ${{ secrets.AIRTABLE_JOBS_TABLE_ID }}
           AIRTABLE_RUNLOG_TABLE_ID: ${{ secrets.AIRTABLE_RUNLOG_TABLE_ID }}
           DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
-        run: python run.py $DRY_RUN
+          CATCH_UP: ${{ inputs.catch_up && '--catch-up' || '' }}
+        run: python run.py $DRY_RUN $CATCH_UP

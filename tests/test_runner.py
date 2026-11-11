@@ -90,3 +90,81 @@ def test_linkedin_skip_card_drops_unmatched_titles_and_saved_jobs():
     assert skip({"title": "CRM Executive", "url": "https://uk.linkedin.com/jobs/view/9?trk=abc", "company": "X"})
     assert skip({"title": "CRM Executive", "url": "https://uk.linkedin.com/jobs/view/2", "company": "Acme"})
     assert not skip({"title": "Senior CRM Executive", "url": "https://uk.linkedin.com/jobs/view/3", "company": "New Co"})
+
+
+def test_linkedin_skip_card_drops_excluded_titles():
+    # An excluded title (e.g. Senior) would be dropped by the filter anyway,
+    # so its detail page isn't fetched.
+    from jobfetcher.runner import _linkedin_skip_card
+    cfg = Config(companies=[], title_lanes={"CRM & Lifecycle": ["crm"]}, title_exclude=["senior"])
+    skip = _linkedin_skip_card(cfg, set(), set())
+    assert skip({"title": "Senior CRM Executive", "company": "Acme", "url": "u1"}) is True
+    assert skip({"title": "CRM Executive", "company": "Acme", "url": "u2"}) is False
+
+
+def test_linkedin_searches_run_once_per_window_narrowest_first():
+    from jobfetcher.config import Company, LinkedInWindow
+    from jobfetcher.runner import _expand_linkedin
+    cfg = Config(companies=[], title_lanes={"CRM & Lifecycle": ["crm"]},
+                 linkedin_windows=[LinkedInWindow("24h", 24), LinkedInWindow("3 days", 72)])
+    companies = [Company(name="Braze", ats="greenhouse", slug="braze"),
+                 Company(name="LinkedIn: CRM Executive", ats="linkedin", slug="CRM Executive")]
+    out = _expand_linkedin(companies, cfg)
+    assert [(c.name, c.posted_within) for c in out] == [
+        ("Braze", None),
+        ("LinkedIn: CRM Executive (24h)", 86400),
+        ("LinkedIn: CRM Executive (3 days)", 259200),
+    ]
+    assert all(c.slug == "CRM Executive" for c in out[1:])
+
+
+def test_no_windows_keeps_one_search():
+    from jobfetcher.config import Company
+    from jobfetcher.runner import _expand_linkedin
+    cfg = Config(companies=[], title_lanes={"CRM & Lifecycle": ["crm"]})
+    companies = [Company(name="LinkedIn: CRM Executive", ats="linkedin", slug="CRM Executive")]
+    assert _expand_linkedin(companies, cfg) == companies
+
+
+def test_windowed_search_passes_window_to_adapter(monkeypatch):
+    from jobfetcher import runner
+    from jobfetcher.config import Company
+    from jobfetcher.models import CompanyResult
+    seen = {}
+
+    def fake_linkedin(slug, name, skip_card=None, posted_within=None):
+        seen["posted_within"] = posted_within
+        return CompanyResult(company=name, ats="linkedin", outcome="Empty", note="none")
+
+    monkeypatch.setattr(runner, "ADAPTERS", {"linkedin": fake_linkedin})
+    monkeypatch.setattr(runner, "_log_run", lambda *a, **k: None)
+    cfg = Config(companies=[], title_lanes={"CRM & Lifecycle": ["crm"]})
+    company = Company(name="LinkedIn: CRM (24h)", ats="linkedin", slug="CRM", posted_within=86400)
+    runner._process_company(company, cfg, set(), set(), dry_run=True)
+    assert seen["posted_within"] == 86400
+
+
+def test_catch_up_flag_drops_linkedin_windows(monkeypatch, tmp_path):
+    import run as entry
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "companies:\n  - name: TestCo\n    ats: greenhouse\n    slug: testco\n"
+        "title_lanes:\n  Growth: [Growth Marketing Manager]\n"
+        "linkedin_windows:\n  - {label: 24h, hours: 24}\n")
+    seen = {}
+
+    def fake_run(config, dry_run=False, resume_path=None):
+        seen["windows"] = config.linkedin_windows
+        seen["dry_run"] = dry_run
+        return {}
+
+    monkeypatch.setattr(entry, "run", fake_run)
+    monkeypatch.setattr(entry, "exit_code", lambda summary: 0)
+    for argv, expected in ((["--catch-up"], []), ([], ["24h"])):
+        monkeypatch.setattr("sys.argv", ["run.py", "--dry-run", "--config", str(path)] + argv)
+        try:
+            entry.main()
+        except SystemExit:
+            pass
+        assert [w.label for w in seen["windows"]] == expected
+        assert seen["dry_run"] is True

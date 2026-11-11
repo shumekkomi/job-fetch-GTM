@@ -43,3 +43,44 @@ def test_skip_card_avoids_fetching_detail_pages():
     assert detail.call_count == 1
     assert [j.title for j in result.jobs] == ["CRM Executive"]
     assert "1 skipped before detail fetch" in result.note
+
+
+def test_escaped_description_is_unescaped_with_line_breaks():
+    # LinkedIn's JSON-LD sends the description as escaped HTML. Saved as-is,
+    # it kept "&lt;br&gt;" in the text and had no line breaks for the
+    # description checks to split on.
+    from unittest.mock import patch
+    from jobfetcher.adapters import linkedin
+
+    card = {"title": "CRM Specialist", "company": "A", "url": "https://uk.linkedin.com/jobs/view/1", "location": "London"}
+    detail = {"description": "&lt;strong&gt;About&lt;br&gt;&lt;/strong&gt;Brands like The Press &amp;amp; Journal."
+                             "&lt;ul&gt;&lt;li&gt;3+ years of CRM experience&lt;/li&gt;&lt;li&gt;HubSpot&lt;/li&gt;&lt;/ul&gt;"}
+    with patch.object(linkedin, "_search_page", return_value=[card]), \
+         patch.object(linkedin, "_fetch_job_detail", return_value=detail), \
+         patch.object(linkedin.time, "sleep"):
+        result = linkedin.fetch("CRM", "LinkedIn: CRM")
+    text = result.jobs[0].description
+    assert "&lt;" not in text and "<" not in text
+    assert "The Press & Journal." in text
+    assert "\n- 3+ years of CRM experience\n" in text and "\n- HubSpot" in text
+
+
+def test_search_params_add_date_window_and_newest_first():
+    from jobfetcher.adapters.linkedin import _search_params
+    plain = _search_params("CRM Executive", "London", 10)
+    assert plain == {"keywords": "CRM Executive", "location": "London", "start": 10}
+    windowed = _search_params("CRM Executive", "London", 0, posted_within=86400)
+    assert windowed["f_TPR"] == "r86400"
+    assert windowed["sortBy"] == "DD"
+
+
+def test_window_is_sent_on_every_page():
+    from unittest.mock import patch
+    from jobfetcher.adapters import linkedin
+
+    full_page = [{"title": "CRM Executive", "company": "A", "url": "https://uk.linkedin.com/jobs/view/{}".format(i),
+                  "location": "London"} for i in range(linkedin.RESULTS_PER_PAGE)]
+    with patch.object(linkedin, "_search_page", side_effect=[full_page, []]) as search, \
+         patch.object(linkedin.time, "sleep"):
+        linkedin.fetch("CRM", "LinkedIn: CRM", skip_card=lambda c: True, posted_within=259200)
+    assert [c.args[3] for c in search.call_args_list] == [259200, 259200]

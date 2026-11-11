@@ -90,7 +90,7 @@ class TestInsertJobs:
             salary_text="£50,000 - £60,000", salary_min=50000, salary_max=60000,
             salary_currency="GBP", salary_interval="year", posted_date="2026-11-01",
             posted_date_kind="first_published", lane="GTM Engineering", match_score=30,
-            raw={"id": 7},
+            raw={"id": 7}, notes="tools: HubSpot (1)",
         )
         supabase_store.insert_jobs([job], source="LinkedIn")
         sql, params = fake_conn.statements[-1]
@@ -105,7 +105,14 @@ class TestInsertJobs:
         assert (row["salary_min"], row["salary_max"], row["salary_currency"]) == (50000, 60000, "GBP")
         assert row["raw_blob"] == '{"id": 7}'
         assert row["status"] == "New"
+        assert row["notes"] == "tools: HubSpot (1)"
         assert row["first_seen"] is not None
+
+
+    def test_empty_notes_saved_as_null(self, fake_conn):
+        supabase_store.insert_jobs([_job()])
+        row = dict(zip(supabase_store._JOB_COLUMNS, fake_conn.statements[-1][1]))
+        assert row["notes"] is None
 
 
 class TestInsertRunLog:
@@ -221,3 +228,23 @@ class TestStorageSetting:
     def test_rejects_unknown_storage(self, tmp_path):
         with pytest.raises(ValueError):
             load_config(self._write(tmp_path, "storage: notion\n"))
+
+
+def test_linkedin_windows_read_from_config(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "companies:\n  - name: TestCo\n    ats: greenhouse\n    slug: testco\n"
+        "title_lanes:\n  Growth: [Growth Marketing Manager]\n"
+        "linkedin_windows:\n  - {label: 24h, hours: 24}\n  - {label: 3 days, hours: 72}\n")
+    config = load_config(str(path))
+    assert [(w.label, w.hours) for w in config.linkedin_windows] == [("24h", 24), ("3 days", 72)]
+
+
+def test_bad_linkedin_window_rejected(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "companies:\n  - name: TestCo\n    ats: greenhouse\n    slug: testco\n"
+        "title_lanes:\n  Growth: [Growth Marketing Manager]\n"
+        "linkedin_windows:\n  - {label: 24h}\n")
+    with pytest.raises(ValueError):
+        load_config(str(path))
