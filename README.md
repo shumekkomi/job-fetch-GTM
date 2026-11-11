@@ -23,7 +23,7 @@ The script connects straight to the database rather than through Supabase's web 
 | Active sources | 34 (13 Greenhouse boards, 8 Ashby boards, 2 Teamtailor sites, 1 SmartRecruiters board, 10 LinkedIn title searches) |
 | Companies checked and logged as having no public ATS | 10 |
 | ATS adapters | Greenhouse, Ashby, Lever, SmartRecruiters, Personio, Teamtailor (RSS), generic schema.org JSON-LD, LinkedIn guest search |
-| Tests | 168, run before every scheduled fetch |
+| Tests | 170, run before every scheduled fetch |
 
 ## How it works
 

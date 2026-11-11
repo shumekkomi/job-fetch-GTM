@@ -68,6 +68,11 @@ class TestYears:
     def test_under_five_is_kept(self, checks):
         assert _ko(checks, "- Have 1–3 years' experience in CRM or Lifecycle Marketing.") is None
 
+    def test_years_far_from_experience_ignored_in_long_paragraph(self, checks):
+        text = ("Founded 12 years ago, we now serve 40 markets. " * 3).replace(". ", ", ") + \
+               "x" * 200 + " and you bring 2+ years of CRM experience"
+        assert DescriptionChecks.years_asked(text) == 2
+
     def test_years_outside_experience_sentences_ignored(self, checks):
         assert _ko(checks, "We have been growing for 10 years. 2+ years of CRM experience.") is None
 

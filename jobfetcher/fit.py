@@ -95,6 +95,11 @@ def sentences(text: str) -> List[str]:
     return [p for p in parts if p.strip()]
 
 
+def _window(text: str, match: "re.Match", chars: int) -> str:
+    """The text around a match, so a long unbroken paragraph is judged locally."""
+    return text[max(0, match.start() - chars): match.end() + chars]
+
+
 def _word_regex(words: List[str]) -> Optional["re.Pattern"]:
     if not words:
         return None
@@ -122,11 +127,12 @@ class DescriptionChecks:
         if m:
             return m.group(0).lower()
         for s in sentences(description):
-            m = tools.search(s)
-            if not m or _NOT_THE_TOOL.search(s):
-                continue
-            if _MUST.search(s) and not _SOFT.search(s) and not _ALTERNATIVE.search(s):
-                return m.group(0).lower()
+            for m in tools.finditer(s):
+                near = _window(s, m, 150)
+                if _NOT_THE_TOOL.search(near):
+                    continue
+                if _MUST.search(near) and not _SOFT.search(near) and not _ALTERNATIVE.search(near):
+                    return m.group(0).lower()
         return None
 
     @staticmethod
@@ -134,9 +140,11 @@ class DescriptionChecks:
         """The highest minimum years figure in any sentence about experience."""
         best = 0
         for s in sentences(description):
-            if not re.search(r"experience|years of work", s, re.I):
-                continue
             for m in _YEARS.finditer(s):
+                # Only a figure next to "experience" counts, so "founded 10
+                # years ago" in a long unbroken paragraph doesn't.
+                if not re.search(r"experience|of work", _window(s, m, 60), re.I):
+                    continue
                 n = int(m.group(1))
                 if n <= 15:
                     best = max(best, n)

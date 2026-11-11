@@ -43,3 +43,23 @@ def test_skip_card_avoids_fetching_detail_pages():
     assert detail.call_count == 1
     assert [j.title for j in result.jobs] == ["CRM Executive"]
     assert "1 skipped before detail fetch" in result.note
+
+
+def test_escaped_description_is_unescaped_with_line_breaks():
+    # LinkedIn's JSON-LD sends the description as escaped HTML. Saved as-is,
+    # it kept "&lt;br&gt;" in the text and had no line breaks for the
+    # description checks to split on.
+    from unittest.mock import patch
+    from jobfetcher.adapters import linkedin
+
+    card = {"title": "CRM Specialist", "company": "A", "url": "https://uk.linkedin.com/jobs/view/1", "location": "London"}
+    detail = {"description": "&lt;strong&gt;About&lt;br&gt;&lt;/strong&gt;Brands like The Press &amp;amp; Journal."
+                             "&lt;ul&gt;&lt;li&gt;3+ years of CRM experience&lt;/li&gt;&lt;li&gt;HubSpot&lt;/li&gt;&lt;/ul&gt;"}
+    with patch.object(linkedin, "_search_page", return_value=[card]), \
+         patch.object(linkedin, "_fetch_job_detail", return_value=detail), \
+         patch.object(linkedin.time, "sleep"):
+        result = linkedin.fetch("CRM", "LinkedIn: CRM")
+    text = result.jobs[0].description
+    assert "&lt;" not in text and "<" not in text
+    assert "The Press & Journal." in text
+    assert "\n- 3+ years of CRM experience\n" in text and "\n- HubSpot" in text

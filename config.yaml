@@ -104,6 +104,16 @@ title_exclude:
   - "ppc"
   - "performance"
   - "sem"
+  # Added after the first test run: "gtm" and "retention" also appear in
+  # recruiting, people, sales and account management titles.
+  - "recruiter"
+  - "recruitment"
+  - "talent"
+  - "people partner"
+  - "account executive"
+  - "account manager"
+  - "enablement"
+  - "customer success"
 
 # -------------------------------------------------------------------
 # Description checks

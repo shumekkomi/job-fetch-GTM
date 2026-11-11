@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 
 from ..http import get
 from ..models import CompanyResult, FetchError, Job
-from ..text import html_to_text, iso_to_date
+from ..text import html_to_text, iso_to_date, unescape_html
 
 SEARCH_URL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
 RESULTS_PER_PAGE = 10
@@ -198,6 +198,11 @@ def fetch(
 
         if detail:
             desc_html = detail.get("description", "")
+            # LinkedIn's JSON-LD sends the description as escaped HTML
+            # (&lt;br&gt;), so unescape it before stripping tags. Without this
+            # the saved text kept the escaped tags and lost every line break.
+            if "&lt;" in desc_html:
+                desc_html = unescape_html(desc_html)
             desc = html_to_text(desc_html) if "<" in desc_html else desc_html
             loc = _location_from_jsonld(detail.get("jobLocation"))
             posted = iso_to_date(detail.get("datePosted"))
