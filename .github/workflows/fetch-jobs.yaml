@@ -24,7 +24,9 @@ permissions:
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Each LinkedIn search runs twice (24h and 3 days) since 11 Nov 2026; a dry
+    # run then took 21 minutes, so 25 left too little room.
+    timeout-minutes: 45
 
     steps:
       # Actions are pinned to exact commits: a tag like v4 can be moved to new
