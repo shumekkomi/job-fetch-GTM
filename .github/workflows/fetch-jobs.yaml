@@ -1,14 +1,17 @@
 # Fetch jobs from ATS APIs and save them to Supabase (or Airtable, per
-# `storage` in config.yaml). Runs once a day, plus a manual "Run workflow"
-# button on the Actions tab, which can also do a dry run.
+# `storage` in config.yaml). Runs three times a day, plus a manual "Run
+# workflow" button on the Actions tab, which can also do a dry run.
 
 name: Fetch Jobs
 
 on:
   schedule:
-    # Cron here is UTC only: 06:00 UTC is 07:00 UK time in summer, 06:00 in
-    # winter. GitHub often starts scheduled runs hours late on busy days.
-    - cron: "0 6 * * *"
+    # Three runs a day so new roles are seen within hours (since 11 Nov 2026).
+    # Cron here is UTC only: these are 07:17, 12:17 and 17:17 UK time in
+    # winter, an hour later in summer. GitHub often starts scheduled runs late,
+    # most of all at the top of the hour, hence :17. The LinkedIn 24-hour
+    # window covers the gaps between runs; already-saved roles are skipped.
+    - cron: "17 7,12,17 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -24,6 +27,12 @@ on:
 # not from GitHub's token, so GitHub's token gets no write access.
 permissions:
   contents: read
+
+# A late scheduled run can overlap the next one. Queue it instead of running
+# both at once, so two runs never save the same new role in parallel.
+concurrency:
+  group: fetch-jobs
+  cancel-in-progress: false
 
 jobs:
   fetch:

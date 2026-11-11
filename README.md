@@ -2,7 +2,7 @@
 
 A scheduled pipeline that pulls job listings straight from company ATS APIs, filters them, deduplicates them against what is already tracked, and saves new matches to a Postgres database on Supabase with the full job description captured at fetch time. It also writes a run log row for every source on every run, including the ones that fail.
 
-It runs once a day on GitHub Actions. It makes no LLM calls: the job text stored is exactly what the company published.
+It runs three times a day on GitHub Actions. It makes no LLM calls: the job text stored is exactly what the company published.
 
 **Status:** running daily since 21 September 2026. An audit on 6 October found two bugs that the green ticks on GitHub had hidden: the first week of runs wrote nothing, and later runs wrote the same jobs again every day. Both are fixed and covered by tests (see the last two failure modes below).
 
@@ -51,7 +51,7 @@ These came from real runs, not from planning.
 - Apply URL is found for roughly 15% of LinkedIn jobs (12 of 80 when first run). Recruitment agency posts never match, nor do companies on Workday or their own careers sites, or boards whose name differs from the company name. Reading the real link from LinkedIn would need a logged-in session, which LinkedIn's terms don't allow for scraping.
 - Workable and Recruitee adapters are stubs: their public endpoints were not usable when this was built. `probe_workable.py` (manual workflow "Probe Workable search") tests whether Workable's cross-employer search at jobs.workable.com can be read instead. It saves nothing.
 - The title and description rules were tuned on 131 roles I applied to, shortlisted or skipped (Sep to Nov 2026). They kept 79 of the 80 I acted on or held and dropped 19 of the 24 I hard-skipped. Tested on the same roles they were written from, so expect them to do somewhat worse on new ones.
-- The schedule asks for 06:00 UTC, but GitHub delays scheduled runs on busy days. In practice they have started between about 10:30 and 13:00 UTC, so new postings are saved around midday rather than first thing.
+- GitHub delays scheduled runs on busy days. With one run at 06:00 UTC they started between about 10:30 and 13:00 UTC, so since 11 Nov 2026 it runs three times a day (07:17, 12:17 and 17:17 UTC, off the hour to cut the delay). Overlapping runs queue rather than run together.
 
 ## File structure
 
@@ -78,7 +78,7 @@ tests/
     samples/                    Saved API responses for offline tests.
     test_*.py                   Adapter, filter, dedup, text and scoring tests.
 .github/workflows/
-    fetch-jobs.yaml             Daily run plus a manual trigger.
+    fetch-jobs.yaml             Three runs a day plus a manual trigger.
     probe-workable.yaml         Manual run of probe_workable.py.
 ```
 
