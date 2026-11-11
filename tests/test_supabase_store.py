@@ -90,7 +90,7 @@ class TestInsertJobs:
             salary_text="£50,000 - £60,000", salary_min=50000, salary_max=60000,
             salary_currency="GBP", salary_interval="year", posted_date="2026-11-01",
             posted_date_kind="first_published", lane="GTM Engineering", match_score=30,
-            raw={"id": 7},
+            raw={"id": 7}, notes="tools: HubSpot (1)",
         )
         supabase_store.insert_jobs([job], source="LinkedIn")
         sql, params = fake_conn.statements[-1]
@@ -105,7 +105,14 @@ class TestInsertJobs:
         assert (row["salary_min"], row["salary_max"], row["salary_currency"]) == (50000, 60000, "GBP")
         assert row["raw_blob"] == '{"id": 7}'
         assert row["status"] == "New"
+        assert row["notes"] == "tools: HubSpot (1)"
         assert row["first_seen"] is not None
+
+
+    def test_empty_notes_saved_as_null(self, fake_conn):
+        supabase_store.insert_jobs([_job()])
+        row = dict(zip(supabase_store._JOB_COLUMNS, fake_conn.statements[-1][1]))
+        assert row["notes"] is None
 
 
 class TestInsertRunLog:

@@ -83,10 +83,19 @@ class TestTitleFilter:
         job = _make_job(title="Growth Marketing Manager")
         assert _match_title(job, lanes) == "Growth"
 
-    def test_substring_match(self):
+    def test_phrase_inside_longer_title(self):
         lanes = {"GTM Engineering": ["GTM Engineer"]}
         job = _make_job(title="Senior GTM Engineer, London")
         assert _match_title(job, lanes) == "GTM Engineering"
+
+    def test_hyphens_read_as_spaces(self):
+        lanes = {"GTM Engineering": ["go to market"]}
+        assert _match_title(_make_job(title="Go-to-Market Engineer"), lanes) == "GTM Engineering"
+        assert _match_title(_make_job(title="Go To Market Engineer"), lanes) == "GTM Engineering"
+
+    def test_whole_words_only(self):
+        lanes = {"CRM & Lifecycle": ["crm"]}
+        assert _match_title(_make_job(title="Scrum Master"), lanes) is None
 
     def test_case_insensitive(self):
         lanes = {"Performance": ["Performance Marketing Manager"]}
@@ -169,6 +178,30 @@ class TestFilterPipeline:
         assert len(passed) == 0
         assert stats.dropped_salary == ["Growth Marketing Manager"]
 
+    def test_exclude_word_drops_and_is_logged(self):
+        config = _make_config(title_exclude=["senior"])
+        jobs = [_make_job(title="Senior Growth Marketing Manager"), _make_job(title="Growth Marketing Manager")]
+        passed, stats = filter_jobs(jobs, _make_company(), config)
+        assert [j.title for j in passed] == ["Growth Marketing Manager"]
+        assert stats.dropped_title_exclude == ["Senior Growth Marketing Manager (senior)"]
+        assert "dropped by title: Senior Growth Marketing Manager (senior)" in stats.summary()
+
+    def test_description_check_drops_and_flags(self):
+        from jobfetcher.fit import DescriptionChecks
+        checks = DescriptionChecks(max_years=5, tool_flags={"HubSpot": ["hubspot"]})
+        config = _make_config(description_checks=checks)
+        jobs = [
+            _make_job(title="Growth Marketing Manager", url="u1",
+                      description="You have 6+ years of experience in growth."),
+            _make_job(title="Growth Marketing Manager", url="u2",
+                      description="2 to 5 years of experience. You use HubSpot daily."),
+        ]
+        passed, stats = filter_jobs(jobs, _make_company(), config)
+        assert [j.url for j in passed] == ["u2"]
+        assert passed[0].notes == "tools: HubSpot (1)"
+        assert stats.after_title == 2 and stats.after_description == 1
+        assert stats.dropped_description == ["Growth Marketing Manager (6+ years)"]
+
     def test_remote_with_keep_unqualified(self):
         config = _make_config()
         company = _make_company(keep_unqualified_remote=True)
@@ -183,42 +216,72 @@ class TestFilterPipeline:
 
 
 class TestRealTitleLanes:
-    """Check the lanes in config.yaml itself, so an edit there can't quietly
-    stop matching the titles the search is actually aimed at."""
+    """Check the lanes and excludes in config.yaml itself, so an edit there can't
+    quietly stop matching the titles the search is aimed at. The titles are
+    real ones from roles applied to, shortlisted or skipped (Sep to Nov 2026)."""
+
+    def _cfg(self):
+        from jobfetcher.config import load_config
+        return load_config("config.yaml")
 
     def _lane(self, title):
-        from jobfetcher.config import load_config
-        cfg = load_config("config.yaml")
-        return _match_title(_make_job(title=title), cfg.title_lanes)
+        return _match_title(_make_job(title=title), self._cfg().title_lanes)
 
-    def test_crm_and_lifecycle_titles(self):
+    def _passes(self, title):
+        from jobfetcher.fit import title_passes
+        cfg = self._cfg()
+        return title_passes(title, cfg.title_lanes, cfg.title_exclude)
+
+    def test_lanes(self):
+        expected = {
+            "GTM Engineer": "GTM Engineering",
+            "Go To Market Engineer": "GTM Engineering",
+            "Go-to-Market Engineer": "GTM Engineering",
+            "Go to Market Systems Admin (HubSpot)": "GTM Engineering",
+            "Growth Marketing Manager (GTM Engineer)": "GTM Engineering",
+            "Marketing AI Engineer": "GTM Engineering",
+            "AI Growth Ops": "GTM Engineering",
+            "Revenue Operations Associate": "RevOps & Systems",
+            "RevOps Analyst": "RevOps & Systems",
+            "Sales Operations Analyst": "RevOps & Systems",
+            "HubSpot Administrator": "RevOps & Systems",
+            "Salesforce Administrator - 12 Month FTC": "RevOps & Systems",
+            "Junior CRM Developer (FTC)": "RevOps & Systems",
+            "Martech Specialist, AI Deployment": "RevOps & Systems",
+            "Marketing Ops & Automation Specialist": "RevOps & Systems",
+            "Marketing Automation Manager": "RevOps & Systems",
+            "CRM Executive": "CRM & Lifecycle",
+            "CRM (Braze) Specialist (Part-Time) - Remote": "CRM & Lifecycle",
+            "CRM Campaign Specialist - 9 Month FTC": "CRM & Lifecycle",
+            "Lifecycle Marketing Manager - London": "CRM & Lifecycle",
+            "Retention Marketing Executive": "CRM & Lifecycle",
+            "Loyalty Executive | LOOKFANTASTIC": "CRM & Lifecycle",
+            "Customer Marketing Executive": "CRM & Lifecycle",
+            "Email Marketing Executive": "CRM & Lifecycle",
+            "Growth Marketing Executive, SME (REF1828M)": "Growth",
+            "Growth Marketer": "Growth",
+            "Growth Manager": "Growth",
+        }
+        for title, lane in expected.items():
+            assert self._lane(title) == lane, title
+
+    def test_excluded_titles(self):
         for title in [
-            "CRM Executive", "Senior CRM Specialist", "Technical CRM Specialist",
-            "Lifecycle Marketing Executive", "Retention Marketing Executive",
-            "Email Marketing Specialist", "Marketing Automation Executive",
-            "Loyalty Executive", "Growth Marketing Specialist",
-            "Senior Digital Marketing Executive", "Marketing Operations Specialist",
-            "CRM Strategist",
+            "Senior CRM Executive", "Sr CRM Marketing Specialist", "Head of CRM",
+            "Regional CRM Manager", "Performance Marketing Manager, Paid Search",
+            "Growth Performance Marketing Manager", "Paid Media Manager",
+            "Principal Technical Marketing Engineer",
         ]:
-            assert self._lane(title) == "CRM & Lifecycle", title
-
-    def test_revops_titles(self):
-        for title in ["Revenue Operations Associate", "RevOps Associate",
-                      "Revenue Operations Specialist"]:
-            assert self._lane(title) == "RevOps", title
-
-    def test_existing_lanes_unchanged(self):
-        assert self._lane("Performance Marketing Manager") == "Performance"
-        assert self._lane("GTM Engineer") == "GTM Engineering"
-        assert self._lane("Growth Marketing Manager") == "Growth"
-
-    def test_growth_marketer_matches(self):
-        assert self._lane("Growth Marketer, Reception.ai") == "Growth"
+            assert not self._passes(title), title
 
     def test_unrelated_titles_do_not_match(self):
         for title in ["Account Executive", "Customer Success Manager",
-                      "Revenue Operations Analyst"]:
+                      "Digital Marketing Manager", "Forward Deployed Engineer",
+                      "Conversion Rate Optimisation (CRO) Specialist"]:
             assert self._lane(title) is None, title
+
+    def test_crm_is_a_whole_word(self):
+        assert self._lane("Scrum Master") is None
 
 
 class TestIncludeRemote:

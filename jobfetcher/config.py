@@ -17,6 +17,8 @@ from typing import Dict, List, Optional
 
 import yaml
 
+from .fit import DescriptionChecks, load_description_checks
+
 STORAGE_OPTIONS = ("airtable", "supabase")
 
 
@@ -39,7 +41,7 @@ class Company:
 class Config:
     """Everything the script needs to run."""
     companies: List[Company]
-    title_lanes: Dict[str, List[str]]    # lane name -> list of title substrings
+    title_lanes: Dict[str, List[str]]    # lane name -> words or phrases matched in the title
     default_location: str = "London"     # the default location to filter for
     salary_floor_gbp: float = 35000.0    # drop jobs with salary explicitly below this
     include_remote: bool = False         # keep remote roles from any region, labelled
@@ -49,6 +51,10 @@ class Config:
     airtable_jobs_table_id: str = ""
     airtable_runlog_table_id: str = ""
     resume_path: Optional[str] = None  # path to a .txt/.md resume for scoring
+    # Titles containing any of these words are dropped even if a lane matches.
+    title_exclude: List[str] = field(default_factory=list)
+    # Knock-outs and flags read from the job description. None = no checks.
+    description_checks: Optional[DescriptionChecks] = None
 
 
 def load_config(path: str = "config.yaml") -> Config:
@@ -84,6 +90,10 @@ def load_config(path: str = "config.yaml") -> Config:
     if not title_lanes:
         raise ValueError("Config must have at least one entry in 'title_lanes'")
 
+    title_exclude = raw.get("title_exclude") or []
+    if not isinstance(title_exclude, list):
+        raise ValueError("Config 'title_exclude' must be a list of words or phrases")
+
     # -- Storage --
     storage = str(raw.get("storage", "airtable")).strip().lower()
     if storage not in STORAGE_OPTIONS:
@@ -104,4 +114,6 @@ def load_config(path: str = "config.yaml") -> Config:
         airtable_jobs_table_id=os.environ.get("AIRTABLE_JOBS_TABLE_ID", ""),
         airtable_runlog_table_id=os.environ.get("AIRTABLE_RUNLOG_TABLE_ID", ""),
         resume_path=raw.get("resume_path"),
+        title_exclude=[str(w) for w in title_exclude],
+        description_checks=load_description_checks(raw.get("description_checks")),
     )

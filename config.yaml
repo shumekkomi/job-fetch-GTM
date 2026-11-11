@@ -47,71 +47,109 @@ storage: supabase
 # -------------------------------------------------------------------
 # Title lanes
 # -------------------------------------------------------------------
-# Case-insensitive substring match. A job whose title contains any of
-# these strings gets tagged with that lane. Order matters: first match wins.
+# A job whose title contains any of these words or phrases gets tagged with
+# that lane. Matching is case-insensitive and on whole words, with hyphens
+# read as spaces: "go to market" matches "Go-to-Market Engineer", and "crm"
+# never matches inside another word. Order matters: first lane wins.
+#
+# Rewritten 11 Nov 2026 from the titles of 131 roles you applied to,
+# shortlisted or skipped. Broad words plus an exclude list (below) replaced
+# the long list of exact titles: the old list kept 50 of the 80 roles you
+# acted on or held, this one keeps 79.
 # -------------------------------------------------------------------
 title_lanes:
-  # Primary target from Oct 2026: Executive / Specialist level in CRM,
-  # lifecycle, retention, email and marketing ops. Listed first so these
-  # win over the broader lanes below.
-  CRM & Lifecycle:
-    - "CRM Executive"
-    - "CRM Specialist"
-    - "CRM Marketing Executive"
-    - "CRM Marketing Specialist"
-    - "CRM Manager"
-    - "CRM Strategist"
-    - "Lifecycle Marketing Executive"
-    - "Lifecycle Marketing Specialist"
-    - "Lifecycle Executive"
-    - "Lifecycle Specialist"
-    - "Retention Marketing Executive"
-    - "Retention Executive"
-    - "Email Marketing Executive"
-    - "Email Marketing Specialist"
-    - "Marketing Automation Executive"
-    - "Marketing Automation Specialist"
-    - "Loyalty Executive"
-    - "Growth Marketing Executive"
-    - "Growth Marketing Specialist"
-    - "Digital Marketing Executive"
-    - "Marketing Operations Executive"
-    - "Marketing Operations Specialist"
-  # Associate-level RevOps (e.g. Ben). Analyst roles are left out on
-  # purpose: they tend to be SQL-heavy.
-  RevOps:
-    - "Revenue Operations Associate"
-    - "Revenue Operations Specialist"
-    - "Revenue Operations Executive"
-    - "Revenue Operations Coordinator"
-    - "RevOps Associate"
-    - "RevOps Specialist"
-  Growth:
-    - "Growth Marketer"
-    - "Growth Marketing Manager"
-    - "Digital Marketing Manager"
-    - "E-commerce Marketing Manager"
-    - "Ecommerce Marketing Manager"
-    - "CRO Manager"
-    - "Conversion Rate Optimisation Manager"
-    - "Conversion Rate Optimization Manager"
-    - "Lifecycle Marketing Manager"
-    - "Marketing Automation Manager"
-  Performance:
-    - "Performance Marketing Manager"
-    - "Paid Media Manager"
-    - "SEM Manager"
-    - "PPC Manager"
   GTM Engineering:
-    - "GTM Engineer"
-    - "Go-to-Market Engineer"
-    - "Growth Engineer"
-    - "Marketing Engineer"
-    - "Marketing Automation Engineer"
-    - "RevOps Engineer"
-    - "Revenue Operations Engineer"
-    - "Marketing Operations Manager"
-    - "Forward Deployed Engineer"
+    - "gtm"
+    - "go to market"
+    - "marketing engineer"
+    - "growth engineer"
+    - "marketing ai"
+    - "ai growth"
+    - "growth ops"
+  RevOps & Systems:
+    - "revops"
+    - "revenue operations"
+    - "sales operations"
+    - "hubspot"
+    - "salesforce admin"
+    - "salesforce administrator"
+    - "crm developer"
+    - "martech"
+    - "marketing operations"
+    - "marketing ops"
+    - "marketing automation"
+  CRM & Lifecycle:
+    - "crm"
+    - "lifecycle"
+    - "retention"
+    - "loyalty"
+    - "customer marketing"
+    - "email marketing"
+  Growth:
+    - "growth marketing"
+    - "growth marketer"
+    - "growth manager"
+
+# Titles with any of these words are dropped even when a lane matches.
+# Senior and above, regional strategy roles, and paid media roles.
+title_exclude:
+  - "senior"
+  - "sr"
+  - "head of"
+  - "director"
+  - "vp"
+  - "principal"
+  - "regional"
+  - "paid"
+  - "ppc"
+  - "performance"
+  - "sem"
+
+# -------------------------------------------------------------------
+# Description checks
+# -------------------------------------------------------------------
+# Read the job description of every role whose title passed. A role with no
+# description is kept. Taken from the reasons you hard-skipped roles.
+# -------------------------------------------------------------------
+description_checks:
+  # Dropped when one of these is in the title, or the description names it
+  # as a must ("hands-on", "proven", "required", "certification") without
+  # offering an alternative. A role listing it next to Braze or Klaviyo, or
+  # as "ideally", is kept: you apply to those.
+  must_have_tools:
+    - "salesforce marketing cloud"
+    - "sfmc"
+    - "marketing cloud"
+    - "adobe journey optimizer"
+    - "adobe journey optimiser"
+    - "ajo"
+    - "adobe campaign"
+    - "marketo"
+  # Dropped when the description asks for this many years or more. Ranges
+  # are read by their lower number: "3 to 5 years" counts as 3.
+  max_years: 5
+  # Dropped when the description asks for fluent or native use of one of these.
+  languages: [french, german, dutch, spanish, italian, portuguese, swedish, polish]
+  # Dropped at this many paid media mentions (Google Ads, paid social, PPC...).
+  paid_heavy_mentions: 9
+  # Kept but flagged in Notes at this many. Testing found no count that
+  # separates paid-heavy growth roles you skip from ones you apply to.
+  paid_flag_mentions: 5
+  # Tools listed in Notes when the description names them. In the test,
+  # roles you held named about 3, roles you applied to about 2, roles you
+  # hard-skipped about 1. Use the count to sort, not to filter.
+  tool_flags:
+    HubSpot: [hubspot]
+    Zapier/Make/n8n: [zapier, n8n, make.com, integromat]
+    Braze: [braze]
+    Iterable: [iterable]
+    Customer.io: [customer.io]
+    Klaviyo: [klaviyo]
+    ActiveCampaign: [activecampaign]
+    SQL: [sql]
+    Clay: [clay]
+    API/webhooks: [api, apis, webhook, webhooks]
+    AI/automation: [ai, automation, automate, automated]
 
 # -------------------------------------------------------------------
 # Company watchlist
@@ -433,9 +471,18 @@ companies:
     tier: 1
     status: active
 
-  - name: "LinkedIn: Performance Marketing Manager"
+  # 11 Nov 2026: "Performance Marketing Manager" removed (paid roles are now
+  # excluded) and replaced by the two searches below.
+  - name: "LinkedIn: Revenue Operations"
     ats: linkedin
-    slug: "Performance Marketing Manager"
+    slug: "Revenue Operations"
+    careers_url: ""
+    tier: 1
+    status: active
+
+  - name: "LinkedIn: Marketing Operations"
+    ats: linkedin
+    slug: "Marketing Operations"
     careers_url: ""
     tier: 1
     status: active

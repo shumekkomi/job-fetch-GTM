@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from .config import Company, Config
+from .fit import find_phrase, match_lane
 from .models import Job
 
 
@@ -20,10 +21,17 @@ class FilterStats:
     total: int = 0
     after_location: int = 0
     after_title: int = 0
+    after_description: int = 0
     after_salary: int = 0
+    dropped_title_exclude: List[str] = None  # "title (word)" for titles dropped by an exclude word
+    dropped_description: List[str] = None    # "title (reason)" for jobs dropped by a description check
     dropped_salary: List[str] = None  # titles of jobs dropped by salary floor
 
     def __post_init__(self):
+        if self.dropped_title_exclude is None:
+            self.dropped_title_exclude = []
+        if self.dropped_description is None:
+            self.dropped_description = []
         if self.dropped_salary is None:
             self.dropped_salary = []
 
@@ -32,8 +40,13 @@ class FilterStats:
             "total: {}".format(self.total),
             "in location: {}".format(self.after_location),
             "title matched: {}".format(self.after_title),
+            "after description checks: {}".format(self.after_description),
             "after salary: {}".format(self.after_salary),
         ]
+        if self.dropped_title_exclude:
+            parts.append("dropped by title: {}".format(", ".join(self.dropped_title_exclude)))
+        if self.dropped_description:
+            parts.append("dropped by description: {}".format(", ".join(self.dropped_description)))
         if self.dropped_salary:
             parts.append("dropped by salary floor: {}".format(", ".join(self.dropped_salary)))
         return "; ".join(parts)
@@ -84,14 +97,10 @@ def _is_remote(job: Job) -> bool:
 def _match_title(job: Job, title_lanes: Dict[str, List[str]]) -> Optional[str]:
     """Check if the job title matches any lane. Returns the lane name, or None.
 
-    Case-insensitive substring match, as specified.
+    Whole-word, case-insensitive match, with hyphens read as spaces (see fit.py).
+    The first lane with a match wins.
     """
-    title_lower = job.title.lower()
-    for lane, patterns in title_lanes.items():
-        for pattern in patterns:
-            if pattern.lower() in title_lower:
-                return lane
-    return None
+    return match_lane(job.title, title_lanes)
 
 
 def _below_salary_floor(job: Job, floor_gbp: float) -> bool:
@@ -115,7 +124,7 @@ def _below_salary_floor(job: Job, floor_gbp: float) -> bool:
 def filter_jobs(
     jobs: List[Job], company: Company, config: Config
 ) -> Tuple[List[Job], FilterStats]:
-    """Apply location, title, and salary filters in order. Returns (passed, stats)."""
+    """Apply location, title, description and salary filters in order. Returns (passed, stats)."""
     stats = FilterStats(total=len(jobs))
 
     # 1. Location filter.
@@ -146,18 +155,36 @@ def filter_jobs(
                     location_passed.append(job)
     stats.after_location = len(location_passed)
 
-    # 2. Title filter.
+    # 2. Title filter: a lane must match and no exclude word may appear.
     title_passed = []
     for job in location_passed:
         lane = _match_title(job, config.title_lanes)
-        if lane:
-            job.lane = lane
-            title_passed.append(job)
+        if not lane:
+            continue
+        excluded = find_phrase(job.title, config.title_exclude)
+        if excluded:
+            stats.dropped_title_exclude.append("{} ({})".format(job.title, excluded))
+            continue
+        job.lane = lane
+        title_passed.append(job)
     stats.after_title = len(title_passed)
 
-    # 3. Salary floor.
-    salary_passed = []
+    # 3. Description checks: knock-outs, then flags on the roles that stay.
+    checks = config.description_checks
+    described = []
     for job in title_passed:
+        if checks:
+            reason = checks.knock_out(job.title, job.description)
+            if reason:
+                stats.dropped_description.append("{} ({})".format(job.title, reason))
+                continue
+            job.notes = checks.flags(job.description)
+        described.append(job)
+    stats.after_description = len(described)
+
+    # 4. Salary floor.
+    salary_passed = []
+    for job in described:
         if _below_salary_floor(job, config.salary_floor_gbp):
             stats.dropped_salary.append(job.title)
         else:

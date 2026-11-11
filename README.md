@@ -20,15 +20,15 @@ The script connects straight to the database rather than through Supabase's web 
 
 | | Count |
 |---|---|
-| Active sources | 33 (13 Greenhouse boards, 8 Ashby boards, 2 Teamtailor sites, 1 SmartRecruiters board, 9 LinkedIn title searches) |
+| Active sources | 34 (13 Greenhouse boards, 8 Ashby boards, 2 Teamtailor sites, 1 SmartRecruiters board, 10 LinkedIn title searches) |
 | Companies checked and logged as having no public ATS | 10 |
 | ATS adapters | Greenhouse, Ashby, Lever, SmartRecruiters, Personio, Teamtailor (RSS), generic schema.org JSON-LD, LinkedIn guest search |
-| Tests | 134, run before every scheduled fetch |
+| Tests | 168, run before every scheduled fetch |
 
 ## How it works
 
 1. **Fetch.** Each company in `config.yaml` is fetched with the adapter for its ATS. LinkedIn entries are title searches rather than company boards, so they find employers that are not on the watchlist.
-2. **Filter.** Location (London by default, with per-company aliases; with `include_remote` on, remote roles from any region are kept too, and labelled in Location when they're listed for another region or don't say), title (substring match into five lanes: CRM & Lifecycle, RevOps, Growth, Performance, GTM Engineering) and a salary floor that only drops roles explicitly paying below it.
+2. **Filter.** Location (London by default, with per-company aliases; with `include_remote` on, remote roles from any region are kept too, and labelled in Location when they're listed for another region or don't say), title (whole-word match into four lanes: GTM Engineering, RevOps & Systems, CRM & Lifecycle, Growth, minus an exclude list for senior, regional and paid media titles), description checks (drops roles that require a tool I don't use, 5+ years, a second language, or are mostly paid media; flags the useful tools named in the Notes column) and a salary floor that only drops roles explicitly paying below it.
 3. **Deduplicate.** Against every job already saved, first by URL, then by company plus title, so the same role found through two sources is only written once.
 4. **Find the original posting (LinkedIn jobs only).** LinkedIn hides where "Apply" leads from logged-out visitors, so for each new LinkedIn job the pipeline guesses the company's board name and looks on Greenhouse, Ashby, Lever and SmartRecruiters. If a posting with exactly the same title is there, its link goes in **Apply URL**. If that posting was already saved straight from the company's board, the LinkedIn copy is skipped as a duplicate.
 5. **Save.** New jobs go to the jobs table with the full description and, where the source gives one, the structured salary range. Every source gets a run log row with its outcome (OK, Empty, Failed, Skipped) and a note.
@@ -47,15 +47,17 @@ These came from real runs, not from planning.
 ## Known limitations
 
 - Resume scoring (a 0 to 100 keyword overlap between a job and my CV) only runs where the CV file exists. The CV lives in a git-ignored `private/` folder, so scheduled runs on GitHub Actions log a warning and skip scoring. Scores land between about 15 and 45, so they work as a ranking rather than a percentage fit.
-- The LinkedIn adapter reads LinkedIn's public guest search pages, capped at three pages per query, and will break if LinkedIn changes its markup. After nine daily searches started hitting LinkedIn's rate limit (HTTP 429), it now waits 2 seconds between requests, skips the detail page for any result whose title no lane matches or that is already saved, and retries a 429 after the server's Retry-After (capped at 60 seconds).
+- The LinkedIn adapter reads LinkedIn's public guest search pages, capped at three pages per query, and will break if LinkedIn changes its markup. After nine daily searches started hitting LinkedIn's rate limit (HTTP 429), it now waits 2 seconds between requests, skips the detail page for any result whose title no lane matches, has an exclude word or is already saved, and retries a 429 after the server's Retry-After (capped at 60 seconds).
 - Apply URL is found for roughly 15% of LinkedIn jobs (12 of 80 when first run). Recruitment agency posts never match, nor do companies on Workday or their own careers sites, or boards whose name differs from the company name. Reading the real link from LinkedIn would need a logged-in session, which LinkedIn's terms don't allow for scraping.
-- Workable and Recruitee adapters are stubs: their public endpoints were not usable when this was built.
+- Workable and Recruitee adapters are stubs: their public endpoints were not usable when this was built. `probe_workable.py` (manual workflow "Probe Workable search") tests whether Workable's cross-employer search at jobs.workable.com can be read instead. It saves nothing.
+- The title and description rules were tuned on 131 roles I applied to, shortlisted or skipped (Sep to Nov 2026). They kept 79 of the 80 I acted on or held and dropped 19 of the 24 I hard-skipped. Tested on the same roles they were written from, so expect them to do somewhat worse on new ones.
 - The schedule asks for 06:00 UTC, but GitHub delays scheduled runs on busy days. In practice they have started between about 10:30 and 13:00 UTC, so new postings are saved around midday rather than first thing.
 
 ## File structure
 
 ```
 run.py                          Entry point. --dry-run to test without writing.
+probe_workable.py               One-off test of Workable's job search. Saves nothing.
 config.yaml                     Watchlist, title lanes, salary floor.
 requirements.txt                Exact versions of every dependency.
 jobfetcher/
@@ -63,7 +65,8 @@ jobfetcher/
     models.py                   Job and CompanyResult data shapes.
     text.py                     HTML-to-text conversion and date parsing.
     http.py                     HTTP requests with retries and error handling.
-    filters.py                  Location, title and salary filters.
+    filters.py                  Location, title, description and salary filters.
+    fit.py                      Title word matching, description knock-outs and Notes flags.
     dedup.py                    Dedup against jobs already saved.
     resume.py                   Keyword-overlap scoring against a CV.
     apply_lookup.py             Finds a LinkedIn job's posting on the company's own board.
@@ -76,6 +79,7 @@ tests/
     test_*.py                   Adapter, filter, dedup, text and scoring tests.
 .github/workflows/
     fetch-jobs.yaml             Daily run plus a manual trigger.
+    probe-workable.yaml         Manual run of probe_workable.py.
 ```
 
 ## Running it yourself
@@ -105,7 +109,7 @@ create table jobhunt.jobs (
   salary_posted text, salary_min numeric, salary_max numeric,
   salary_currency text, salary_interval text, location text,
   date_posted date, posted_date_kind text, fingerprint text, lane text,
-  status text, match_score numeric, first_seen timestamptz default now()
+  status text, match_score numeric, notes text, first_seen timestamptz default now()
 );
 create table jobhunt.run_log (
   id bigint generated always as identity primary key,
@@ -197,7 +201,7 @@ Put your CV (as `.md` or `.txt`) at `private/cv.md`, or pass `--resume path/to/c
 
 ### Adding a title
 
-Add it to a lane under `title_lanes` in `config.yaml`. Matching is case-insensitive substring, so "Growth Marketing Manager" also catches "Senior Growth Marketing Manager, EMEA".
+Add a word or phrase to a lane under `title_lanes` in `config.yaml`. Matching is case-insensitive and on whole words, with hyphens read as spaces: "go to market" catches "Go-to-Market Engineer", and "crm" never matches inside another word. To stop a kind of title, add a word to `title_exclude`. The knock-outs and Notes flags live under `description_checks`.
 
 ### Reading a failed run
 

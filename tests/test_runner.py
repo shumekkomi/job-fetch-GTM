@@ -90,3 +90,13 @@ def test_linkedin_skip_card_drops_unmatched_titles_and_saved_jobs():
     assert skip({"title": "CRM Executive", "url": "https://uk.linkedin.com/jobs/view/9?trk=abc", "company": "X"})
     assert skip({"title": "CRM Executive", "url": "https://uk.linkedin.com/jobs/view/2", "company": "Acme"})
     assert not skip({"title": "Senior CRM Executive", "url": "https://uk.linkedin.com/jobs/view/3", "company": "New Co"})
+
+
+def test_linkedin_skip_card_drops_excluded_titles():
+    # An excluded title (e.g. Senior) would be dropped by the filter anyway,
+    # so its detail page isn't fetched.
+    from jobfetcher.runner import _linkedin_skip_card
+    cfg = Config(companies=[], title_lanes={"CRM & Lifecycle": ["crm"]}, title_exclude=["senior"])
+    skip = _linkedin_skip_card(cfg, set(), set())
+    assert skip({"title": "Senior CRM Executive", "company": "Acme", "url": "u1"}) is True
+    assert skip({"title": "CRM Executive", "company": "Acme", "url": "u2"}) is False

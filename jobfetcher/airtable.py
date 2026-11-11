@@ -178,6 +178,8 @@ def _job_to_record(job: Job, source: str = "Direct") -> Dict[str, Any]:
         fields[JOB_FIELDS["lane"]] = job.lane
     if job.match_score is not None:
         fields[JOB_FIELDS["match_score"]] = job.match_score
+    if job.notes:
+        fields[JOB_FIELDS["notes"]] = job.notes
     if job.apply_url:
         fields[JOB_FIELDS["apply_url"]] = job.apply_url
 

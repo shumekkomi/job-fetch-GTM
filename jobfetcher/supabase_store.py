@@ -103,7 +103,7 @@ _JOB_COLUMNS = (
     "jd_text", "raw_blob", "job_url", "apply_url", "salary_posted",
     "salary_min", "salary_max", "salary_currency", "salary_interval",
     "location", "date_posted", "posted_date_kind", "fingerprint", "lane",
-    "status", "match_score", "first_seen",
+    "status", "match_score", "notes", "first_seen",
 )
 
 # A URL already in the table is skipped, never overwritten: dedup should have
@@ -139,6 +139,7 @@ def _job_to_row(job: Job, source: str, now: datetime) -> Dict[str, Any]:
         "lane":             job.lane,
         "status":           "New",
         "match_score":      job.match_score,
+        "notes":            job.notes or None,
         "first_seen":       now,
     }
 
